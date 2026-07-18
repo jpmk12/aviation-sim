@@ -1,95 +1,132 @@
-# ✈️ Flight Deck — aviation games for little pilots
+# ✈️ Flight Deck 🚀 — aviation games for little pilots
+
+![Flight Deck — Flight School and Space School](docs/hero.png)
 
 A small collection of aviation-themed games built for two young children (target:
-a competent 5-year-old, younger sibling supervised). iPad, touch, landscape.
+a competent 5-year-old, younger sibling supervised). **iPad, touch, landscape.**
 Each game is **one self-contained HTML file** — Three.js is inlined, no CDN, no
 network needed at play time.
 
-- **Flight School** — a cargo-flying game. Pick a pilot, load a creature, fly it
-  to Grandma's / the mountain / the island, and airdrop it. The creature stays
-  there forever. Built. See below.
-- **Space School** — a space delivery game (a rocket ferrying cargo to planets
-  and moons). Planned next; the launcher already has a slot for it.
+Both games share the same non-negotiables: **no crashes, no game-over, no score,
+no timer, no reading required.** Icons, colour, size, sound and motion carry all
+meaning — every screen survives with the text removed. And each teaches one
+wordless, physical intuition the child leaves with but never hears named.
 
-The design contract lives in `CLAUDE.md` (Flight School). This README is the
-grown-up's manual.
+| | |
+|---|---|
+| **✈️ Flight School** | Fly cargo creatures to Grandma's, the mountain, the island, and airdrop them. *Hidden lesson: pulling up costs you speed.* |
+| **🚀 Space School** | Launch a rocket, fly a cockpit through space, and land a buddy on a planet. *Hidden lesson: your engine is the only thing that changes your motion.* |
+
+---
+
+## ✈️ Flight School
+
+<img src="docs/flight-fly.png" width="640" alt="Flight School — flying toward a landmark with the nav chevron and smoke trail">
+
+Pick a pilot, load a creature (a big dragon is genuinely heavier to fly than a
+little lizard), choose a destination, and fly there with a floating thumb-stick.
+Press the giant **DROP** button overhead and the creature parachutes down, thumps,
+stands up and waves — and **stays there forever.** Fly over the mountain next
+Saturday and there's the dragon you airdropped, still waving.
+
+- No crashes: touching the ground is a comedy *boing* and an instant respawn.
+- The plane rights itself when you let go of the stick, and can't loop or fly
+  inverted — it's built so a 5-year-old is never lost.
+- Pull up too hard and the plane runs out of speed, gets "sleepy" (a whoop, the
+  nose drops, it wakes up on its own), and speeds back up in a dive. That *is*
+  the energy lesson — felt, never explained.
+
+## 🚀 Space School
+
+Three stages, one journey: **launch → space → land.**
+
+<p>
+<img src="docs/space-launch.png" width="260" alt="Launch stage">
+<img src="docs/space-cockpit.png" width="260" alt="Space cockpit stage">
+<img src="docs/space-landing.png" width="260" alt="Landing stage">
+</p>
+
+1. **Launch** — shove the throttle up to beat gravity (a timid push just rumbles
+   on the pad), watch the boosters separate and the sky fade to stars.
+2. **Space** — a first-person cockpit full of flip-for-fun **switches and buttons**
+   (lights, comms, warp, music…). Steer, thrust, and *coast* like real space;
+   follow the glowing beacon to your planet, scoop floating stars, bonk
+   harmlessly off asteroids.
+3. **Land** — retro-burn to slow your fall against the planet's gravity. Feather
+   it down for confetti (any landing is a happy one). Your buddy hops out and
+   lives on that planet forever, visible from orbit on your next trip.
+
+Same pilots and buddies as Flight School — and a heavier buddy makes a heavier
+rocket and a trickier landing, the same load-planning lesson carried across.
 
 ---
 
 ## Quick start
 
 ```bash
-node build.js          # emits dist/flightschool.html + dist/index.html
-node test/physics-sim.js   # proves the flight model (stall on a sustained pull)
+node build.js                # -> dist/flightschool.html, dist/spaceschool.html,
+                             #    dist/index.html (launcher), index.html (Pages entry)
+node test/physics-sim.js     # Flight School flight-model acceptance test
+node test/space-sim.js       # Space School launch / coast / landing test
 ```
 
-Open `dist/index.html` (the launcher) or `dist/flightschool.html` directly.
+There are **no dependencies to install** — `build.js` and the physics tests are
+plain Node, and Three.js is vendored in `src/vendor/three.min.js`. Open
+`dist/index.html` (the launcher) or either game's HTML directly.
 
-There are **no dependencies to install** — `build.js` and the test are plain
-Node, and Three.js is vendored in `src/vendor/three.min.js`.
+The end-to-end tests (`test/e2e-*.js`) additionally drive the built games in a
+browser; those need Playwright (`npm i playwright`) and a Chromium binary — see
+the top of each file.
 
 ---
 
 ## Getting it onto the iPad
 
-Persistence (the world each child builds, one delivery at a time) uses
-`localStorage`, which needs a real web origin. **Host the `dist/` folder** on any
-static host (this is the spec's recommendation — see `CLAUDE.md` §11.1) and open
-it in Safari. Then:
+Persistence (the worlds each child builds, one delivery at a time) uses
+`localStorage`, which needs a real web origin. **Host the repo** (GitHub Pages is
+set up — the site root redirects to the launcher) and open it in Safari. Then:
 
 1. Open the launcher URL in Safari.
-2. **Share → Add to Home Screen.** Launch it from the home-screen icon so it runs
-   fullscreen without the Safari address bar (thumbs find the URL bar within a
-   minute otherwise).
-3. Turn the iPad **landscape**. Portrait shows a "turn me sideways" screen.
+2. **Share → Add to Home Screen**, and launch from the home-screen icon so it
+   runs fullscreen without the Safari address bar.
+3. Turn the iPad **landscape** (portrait shows a "turn me sideways" screen).
 4. **Guided Access** (triple-click the side button) locks the child into the app
-   and disables the home-swipe. This is the real fix for accidental exits — it is
-   deliberately not solved in code.
+   and disables the home-swipe — the real fix for accidental exits.
 
-`file://` (opening the HTML from the Files app) works to *play*, but Safari
-restricts `localStorage` on `file://` origins, so deliveries won't survive
-between sessions. The game falls back to in-memory state so it still runs.
+`file://` (opening from the Files app) plays fine, but Safari blocks
+`localStorage` on `file://`, so deliveries won't persist between sessions (the
+game falls back to in-memory state so it still runs).
 
 ---
 
 ## How to play (hand it to the kid, say nothing)
 
-1. **Tap a pilot** (the fox or the dragon). That tap also unlocks sound.
-2. **Pick a buddy.** Bigger buddy = heavier = harder to fly. The dots under each
-   card count the weight.
-3. **Pick where to go.** Three picture cards, colour-matched to the beacons.
-4. **Fly.** Left thumb anywhere on the left half = a floating stick (up/down =
-   climb/dive, left/right = turn). The plane rights itself when you let go.
-5. **Press the big red DROP** over the target. A parachute opens, the buddy floats
-   down, thumps, stands up and waves. It stays there forever.
-6. Fly low back over the runway to return to the hangar for another trip.
+**Flight School:** tap a pilot → pick a buddy (bigger = heavier) → pick where to
+go → left thumb steers, big red **DROP** airdrops the buddy over the target → fly
+low over the runway to come home for another trip.
 
-**The one thing they'll learn without being told:** pulling up hard bleeds
-speed — climb too steeply and the plane gets "sleepy" (a whoop, the nose drops,
-it wakes up on its own). Diving builds speed back (listen to the engine). A heavy
-buddy makes all of this happen sooner. No crashes, no score, no losing.
+**Space School:** tap a pilot → pick a buddy → pick a planet → shove the
+**throttle** up to launch → in space, **steer + thrust** toward the beacon and
+flip switches for fun → **retro-burn** down to land softly. The buddy stays.
 
 ---
 
-## For Dad: editing the game
+## For grown-ups: editing the games
 
-Everything you'd want to change is in the **CONFIG block at the very top of
-`src/game.js`** — then re-run `node build.js`.
+Everything you'd want to change lives in the **CONFIG block at the top of
+`src/game.js`** (Flight School) and **`src/spacegame.js`** (Space School) — then
+re-run `node build.js`:
 
-- **`landmarks`** — name the three destinations after real places (Grandma's
-  house is worth more than any terrain). Set `label`, `color`, and `pos: [x, y, z]`
-  (y is ignored; they sit on the ground). `color` drives the beacon column and
-  the nav arrow.
-- **`profiles`** — your kids. Identity is the **icon + colour** (a child can't
-  read a name). Put their `name` and `initials`; the tail number paints itself
-  from the initials (e.g. initials `"R"` → `N-R` on the tail).
-- **`creatures`** — the cargo. `mass` (0.15–0.8) is the important one: it makes
-  the plane sluggish. `scale` just makes a heavy creature look big.
-- **`invertPitch`** — flip to `true` if your child expects "pull back to climb".
-  Default `false` = push the stick up to go up.
+- **Destinations** — name them after real people and places (Grandma's house,
+  the real mountain). Set label, colour, position.
+- **Pilots** — your kids. Identity is the icon + colour; the tail number paints
+  itself from their initials. `invertPitch: true` if your child expects "pull
+  back to climb".
+- **Buddies** — the cargo. `mass` (0.15–0.8) is the one that matters: it makes
+  the plane/rocket sluggish and the landing trickier.
 
-The flight-model numbers live in `src/aero.js` with comments explaining every
-tuning choice (they were verified, not guessed — see the test).
+The flight numbers live in `src/aero.js` and `src/space.js` with comments
+explaining every tuning choice — and they're *proven*, not guessed (see below).
 
 ---
 
@@ -97,31 +134,43 @@ tuning choice (they were verified, not guessed — see the test).
 
 ```
 src/
-  aero.js         flight-model constants + the one equation (framework-free, tested)
-  game.js         the whole game: CONFIG / PERSIST / AUDIO / WORLD / CREATURES / PLANE / UI / MAIN
-  shell.html      the HTML shell + all CSS + iOS meta tags
-  vendor/
-    three.min.js  Three.js r150 (UMD), vendored — inlined at build time
-build.js          zero-dependency build: src/ -> dist/flightschool.html + dist/index.html
+  aero.js         Flight School flight numbers + the energy equation (tested)
+  space.js        Space School launch/space/landing numbers (tested)
+  game.js         Flight School — CONFIG / PERSIST / AUDIO / WORLD / CREATURES / PLANE / UI / MAIN
+  spacegame.js    Space School — CONFIG / PERSIST / AUDIO / BUILDERS / STAGES / UI / MAIN
+  shell.html      Flight School HTML shell + CSS + iOS meta
+  spaceshell.html Space School HTML shell + CSS + iOS meta
+  vendor/three.min.js   Three.js r150 (UMD), vendored — inlined at build time
+build.js          zero-dep build: src/ -> dist/*.html + launcher + Pages entry
 test/
-  physics-sim.js  proves a sustained pull stalls, a dive builds speed, heavy stalls sooner
+  physics-sim.js        Flight School flight-model acceptance
+  space-sim.js          Space School flight-model acceptance
+  e2e-verify.js         Flight School full-flow browser test (Playwright)
+  e2e-space-verify.js   Space School full-flow browser test (Playwright)
 dist/
-  flightschool.html   the shippable single file
-  index.html          the launcher / dashboard (lists every game)
+  index.html            the launcher / dashboard (lists both games)
+  flightschool.html     shippable single file
+  spaceschool.html      shippable single file
+index.html        GitHub Pages root -> redirects to dist/index.html
+CLAUDE.md         Flight School design contract
+SPACE_SCHOOL.md   Space School design contract
 ```
 
 ## Verifying a change
 
-- `node test/physics-sim.js` — the flight-model acceptance test. If you retune
-  `aero.js`, this tells you whether the energy lesson survived.
-- Rebuild and open `dist/flightschool.html`. The real acceptance test (from the
-  spec): hand it to the five-year-old with no explanation — they should be
-  delivering a creature within 60 seconds, and asking for it again the next day.
+- `node test/physics-sim.js` / `node test/space-sim.js` — the flight-model
+  acceptance tests. If you retune the numbers, these tell you whether the lesson
+  survived (Flight School: a sustained pull still stalls; Space School: a timid
+  throttle can't lift, a retro-burn still lands soft).
+- The `test/e2e-*.js` scripts walk each built game end-to-end in a browser.
+- **The real acceptance test:** hand it to the five-year-old with no explanation.
+  They should be flying — and delivering — within a minute, and asking for it
+  again the next day.
 
-## v2 ideas (already scaffolded for)
+## Roadmap (v2)
 
-- **Manual throttle** — flip a CONFIG flag when a kid is ready (`CLAUDE.md` §11.4).
-- **Forged creatures** — swap the procedural creatures for meshes the kids design
-  and 3D-print; `mass` flows straight into the flight model (`CLAUDE.md` §9.2).
-- **Space School** — the launcher already reserves a card; add its HTML to `dist/`
-  and uncomment the entry in `build.js`.
+- **Manual throttle** for Flight School when a kid is ready (a CONFIG flag).
+- **Forged creatures** — swap the procedural buddies for meshes the kids design
+  and 3D-print; `mass` flows straight into the flight model.
+- Wire a couple of Space School's toy switches to visible effects; tune trip
+  length / add a manual "descend now" control.
