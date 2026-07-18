@@ -177,7 +177,7 @@ var Audio = (function () {
     thump:  function () { noise(0.18, 0.4, 500); tone('sine', 120, 60, 0.22, 0.28); },
     chime:  function (big) { tone('triangle', 660, 660, 0.5, 0.22); tone('triangle', 831, 831, 0.5, 0.2, 0.06);
                             if (big) { tone('triangle', 990, 990, 0.6, 0.2, 0.12); } },
-    honk:   function () { tone('square', 300, 300, 0.18, 0.2); tone('square', 240, 240, 0.22, 0.18, 0.12); },
+    honk:   function () { tone('square', 340, 320, 0.07, 0.22); tone('square', 250, 245, 0.08, 0.18, 0.09); }, // snappy beep-beep
     get available() { return !!ctx; }
   };
 })();
@@ -918,6 +918,16 @@ function boot() {
   window.addEventListener('pointermove', onMove, { passive: false });
   window.addEventListener('pointerup', onUp);
   window.addEventListener('pointercancel', onUp);
+
+  // iOS: kill pinch-zoom, double-tap-zoom and rubber-band scroll so a touch
+  // only ever flies the plane (spec §4.2). Without this a stray pinch zooms the
+  // page and one-finger drags then scroll the zoomed page instead of steering.
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (ev) {
+    document.addEventListener(ev, function (e) { e.preventDefault(); }, { passive: false });
+  });
+  document.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
+  var _lastTap = 0;
+  document.addEventListener('touchend', function (e) { var n = Date.now(); if (n - _lastTap < 350) e.preventDefault(); _lastTap = n; }, { passive: false });
 
   // expose actions to the UI layer
   App.actions = {

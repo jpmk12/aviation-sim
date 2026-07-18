@@ -543,6 +543,15 @@ function boot() {
   window.addEventListener('pointerdown', onDown, { passive: false });
   window.addEventListener('pointermove', onMove, { passive: false });
   window.addEventListener('pointerup', onUp); window.addEventListener('pointercancel', onUp);
+  // iOS: kill pinch-zoom, double-tap-zoom and rubber-band scroll so a touch only
+  // ever flies the craft. A stray pinch would zoom the page and turn every drag
+  // into a scroll instead of a control.
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (ev) {
+    document.addEventListener(ev, function (e) { e.preventDefault(); }, { passive: false });
+  });
+  document.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
+  var _lastTap = 0;
+  document.addEventListener('touchend', function (e) { var n = Date.now(); if (n - _lastTap < 350) e.preventDefault(); _lastTap = n; }, { passive: false });
 
   /* ==================================================================
    * loop
