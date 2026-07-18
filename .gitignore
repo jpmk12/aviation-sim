@@ -1,5 +1,6 @@
 node_modules/
 # throwaway verification/screenshot artifacts written into dist/ during testing
 dist/_shot_*.png
+dist/_sp_*.png
 dist/_verify_shot.png
 .DS_Store

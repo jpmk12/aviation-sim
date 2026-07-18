@@ -1,0 +1,126 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#05060f">
+<title>Space School</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #05060f;
+    overscroll-behavior: none; -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
+    font-family: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif; }
+  #app { position: fixed; inset: 0; }
+  #stage { position: absolute; inset: 0; }
+  #stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  #ui { position: absolute; inset: 0; pointer-events: none; }
+  #ui > * { pointer-events: auto; }
+
+  /* ---- menu screens (shared look with Flight School) ---- */
+  .screen { position: absolute; inset: 0; display: none; z-index: 20; }
+  .space-bg { background: radial-gradient(120% 120% at 50% 0%, #2a3570 0%, #141a3a 55%, #05060f 100%); }
+  .center { align-items: center; justify-content: center; flex-direction: column; gap: 4vh; }
+  .bigtitle { color: #fff; font-size: clamp(28px, 6vh, 60px); font-weight: 800; text-shadow: 0 3px 0 rgba(0,0,0,.3); }
+  .cardrow { display: flex; gap: 3vw; align-items: center; justify-content: center; }
+  .cardrow.wrap { flex-wrap: wrap; max-width: 94vw; }
+  .pilotcard { border: none; border-radius: 28px; width: 30vw; max-width: 300px; height: 40vh; max-height: 380px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1vh;
+    box-shadow: 0 12px 0 rgba(0,0,0,.3), 0 18px 30px rgba(0,0,0,.4); cursor: pointer; transition: transform .1s; }
+  .pilotcard:active { transform: scale(.95) translateY(4px); }
+  .picon { font-size: clamp(60px, 16vh, 150px); line-height: 1; }
+  .pname { color: #fff; font-size: clamp(18px, 3.4vh, 34px); font-weight: 800; }
+  .creaturecard, .destcard { border: 6px solid #fff; border-radius: 24px; background: #fff;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    box-shadow: 0 10px 0 rgba(0,0,0,.3), 0 16px 28px rgba(0,0,0,.4); cursor: pointer; overflow: hidden; padding: 6px; transition: transform .1s; }
+  .creaturecard:active, .destcard:active { transform: scale(.94) translateY(4px); }
+  .destcard { width: 26vw; max-width: 300px; height: 32vh; max-height: 300px; }
+  .cimg { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+  .pips { display: flex; gap: 6px; padding: 6px 0 2px; }
+  .pip { width: 14px; height: 14px; border-radius: 50%; box-shadow: inset 0 -2px 0 rgba(0,0,0,.2); }
+  .destname { color: #233; font-weight: 800; font-size: clamp(14px, 2.4vh, 24px); padding: 4px; }
+
+  /* ---- generic HUD ---- */
+  .hud { position: absolute; inset: 0; z-index: 15; pointer-events: none; }
+  .hud > * { pointer-events: auto; }
+
+  /* throttle lever (launch + landing) */
+  .throttle { position: absolute; left: 6vw; bottom: 8vh; width: 74px; height: 44vh; max-height: 360px;
+    border-radius: 40px; border: 5px solid rgba(255,255,255,.7); background: rgba(20,30,60,.5);
+    overflow: hidden; touch-action: none; }
+  .throttle.retro { left: auto; right: 6vw; border-color: rgba(255,180,80,.8); }
+  .throttle-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 0%;
+    background: linear-gradient(0deg, #ff7a2a, #ffd24a); transition: none; }
+  .throttle.retro .throttle-fill { background: linear-gradient(0deg, #ff3b30, #ffb01a); }
+  .throttle-knob { position: absolute; left: -6px; right: -6px; bottom: 0; height: 44px; border-radius: 22px;
+    background: #fff; box-shadow: 0 3px 10px rgba(0,0,0,.5); }
+  .ignite { position: absolute; right: 8vw; bottom: 12vh; width: 20vh; height: 20vh; min-width: 110px; min-height: 110px;
+    max-width: 190px; max-height: 190px; border-radius: 50%; border: 8px solid #fff; background: #ff3b30; color: #fff;
+    font-size: 6vh; box-shadow: 0 10px 0 #b02017, 0 16px 26px rgba(0,0,0,.4); cursor: pointer; }
+  .ignite:active { transform: translateY(5px); box-shadow: 0 4px 0 #b02017; }
+  .ignite.lit { animation: throb 1s ease-in-out infinite; }
+  @keyframes throb { 0%,100% { box-shadow: 0 10px 0 #b02017, 0 16px 26px rgba(0,0,0,.4); } 50% { box-shadow: 0 10px 0 #b02017, 0 0 0 12px rgba(255,59,48,.3), 0 16px 26px rgba(0,0,0,.4); } }
+
+  .hint { position: absolute; font-size: 42px; opacity: .55; pointer-events: none; animation: bob 1.4s ease-in-out infinite; }
+  .hint-launch { left: calc(6vw + 24px); bottom: 54vh; }
+  .hint-retro { right: calc(6vw + 24px); bottom: 54vh; }
+  @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
+  /* nudge buttons (landing) */
+  .nudge { position: absolute; left: 6vw; bottom: 8vh; display: flex; gap: 14px; }
+  .nudgebtn { width: 74px; height: 74px; border-radius: 18px; border: 4px solid rgba(255,255,255,.8);
+    background: rgba(20,30,60,.5); color: #fff; font-size: 30px; }
+  .nudgebtn:active { transform: scale(.9); background: #ffd23f; color: #223; }
+
+  /* ---- space cockpit ---- */
+  .cockpit-frame { position: absolute; inset: 0; pointer-events: none;
+    box-shadow: inset 0 0 90px 30px rgba(0,0,10,.65); border-bottom: 0 solid transparent; }
+  .cockpit-glow { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .3s;
+    background: radial-gradient(120% 60% at 50% 100%, rgba(120,180,255,.22), transparent 70%); }
+  .dashboard { position: absolute; left: 0; right: 0; bottom: 0; height: 22vh; min-height: 130px;
+    background: linear-gradient(0deg, #10131f 60%, #171b2c 100%); border-top: 4px solid #2b3350;
+    border-radius: 40px 40px 0 0 / 30px 30px 0 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 8px; box-shadow: 0 -8px 30px rgba(0,0,0,.5); }
+  .bulbs { display: flex; gap: 12px; }
+  .bulb { width: 16px; height: 16px; border-radius: 50%; background: #2a3350; box-shadow: inset 0 -2px 0 rgba(0,0,0,.4); }
+  .bulb.lit { background: #ffe066; box-shadow: 0 0 10px #ffe066; }
+  .switches { display: flex; gap: 14px; }
+  .switch { width: 60px; height: 60px; border-radius: 14px; border: 3px solid #3a4463;
+    background: #222a42; color: #fff; font-size: 26px; box-shadow: inset 0 -4px 0 rgba(0,0,0,.4); cursor: pointer; }
+  .switch:active { transform: translateY(2px); }
+  .switch.on { background: #ffd23f; color: #223; box-shadow: 0 0 0 4px rgba(255,210,63,.35); }
+  .thrust { position: absolute; right: 5vw; bottom: 26vh; width: 22vh; height: 22vh; min-width: 120px; min-height: 120px;
+    max-width: 200px; max-height: 200px; border-radius: 50%; border: 8px solid #fff; background: #2f7fe6; color: #fff;
+    font-size: 7vh; box-shadow: 0 10px 0 #1c5bb0, 0 16px 26px rgba(0,0,0,.4); cursor: pointer; }
+  .thrust:active, .thrust.on { transform: translateY(5px) scale(.97); box-shadow: 0 4px 0 #1c5bb0, 0 0 0 10px rgba(47,127,230,.3); }
+  .starcount { position: absolute; top: calc(2vh + env(safe-area-inset-top)); right: 4vw; color: #ffe066;
+    font-size: clamp(20px, 4vh, 34px); font-weight: 800; text-shadow: 0 2px 4px rgba(0,0,0,.6); }
+
+  .stick { position: absolute; width: 140px; height: 140px; border-radius: 50%; z-index: 16;
+    border: 4px solid rgba(255,255,255,.5); background: rgba(255,255,255,.1); pointer-events: none; }
+  .stick-knob { position: absolute; width: 70px; height: 70px; border-radius: 50%; left: 35px; top: 35px;
+    background: rgba(255,255,255,.85); box-shadow: 0 4px 12px rgba(0,0,0,.4); }
+
+  .chevron { position: absolute; width: 68px; height: 68px; display: none; align-items: center; justify-content: center;
+    font-size: 56px; z-index: 17; pointer-events: none; filter: drop-shadow(0 0 6px rgba(0,0,0,.5)); }
+
+  .banner { position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    font-size: 26vh; z-index: 30; pointer-events: none; }
+  .banner.show { animation: pop .5s ease-out; }
+  @keyframes pop { 0% { transform: scale(.2); opacity: 0; } 60% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); } }
+  .sepbadge { position: absolute; top: 20vh; left: 50%; transform: translateX(-50%); font-size: 80px; transition: opacity .3s; pointer-events: none; }
+
+  /* portrait */
+  .portrait { position: absolute; inset: 0; z-index: 60; display: none; flex-direction: column; align-items: center;
+    justify-content: center; gap: 3vh; background: #05060f; color: #fff; }
+  .roticon { font-size: 22vh; animation: rock 1.6s ease-in-out infinite; }
+  @keyframes rock { 0%,100% { transform: rotate(-12deg); } 50% { transform: rotate(12deg); } }
+  .portmsg { font-size: clamp(22px, 5vh, 44px); font-weight: 800; }
+</style>
+<div id="app">
+  <div id="stage"></div>
+  <div id="ui"></div>
+</div>
+<!--THREE-->
+<!--SPACE-->
+<!--SPACEGAME-->

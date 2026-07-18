@@ -37,12 +37,27 @@ function buildGame() {
   return { out: out, bytes: Buffer.byteLength(html) };
 }
 
+function buildSpaceGame() {
+  var shell = read(path.join(SRC, 'spaceshell.html'));
+  var three = read(path.join(SRC, 'vendor', 'three.min.js'));
+  var space = read(path.join(SRC, 'space.js'));
+  var game = read(path.join(SRC, 'spacegame.js'));
+  var html = shell;
+  html = inject(html, '<!--THREE-->', three);
+  html = inject(html, '<!--SPACE-->', space);
+  html = inject(html, '<!--SPACEGAME-->', game);
+  var out = path.join(DIST, 'spaceschool.html');
+  fs.writeFileSync(out, html);
+  return { out: out, bytes: Buffer.byteLength(html) };
+}
+
 // The launcher lists every game by title + icon (spec §10.1). New games just
 // add an entry here; each is a sibling HTML file in dist/.
 var GAMES = [
   { id: 'flightschool', title: 'Flight School', icon: '✈️', href: 'flightschool.html',
-    tint: '#4f8fe6', blurb: 'Fly cargo to Grandma, the mountain, the island.' }
-  // { id: 'spaceschool', title: 'Space School', icon: '🚀', href: 'spaceschool.html', tint: '#2b1b52', blurb: '...' }
+    tint: '#4f8fe6', blurb: 'Fly cargo to Grandma, the mountain, the island.' },
+  { id: 'spaceschool', title: 'Space School', icon: '🚀', href: 'spaceschool.html',
+    tint: '#5b6bd6', blurb: 'Launch, fly through space, land a buddy on a planet.' }
 ];
 
 function buildLauncher() {
@@ -105,8 +120,10 @@ function buildRootEntry() {
 
 if (!fs.existsSync(DIST)) fs.mkdirSync(DIST, { recursive: true });
 var g = buildGame();
+var sp = buildSpaceGame();
 var l = buildLauncher();
 var r = buildRootEntry();
 console.log('built ' + path.relative(ROOT, g.out) + '  (' + (g.bytes / 1024 / 1024).toFixed(2) + ' MB)');
+console.log('built ' + path.relative(ROOT, sp.out) + '  (' + (sp.bytes / 1024 / 1024).toFixed(2) + ' MB)');
 console.log('built ' + path.relative(ROOT, l.out) + '  (' + (l.bytes / 1024).toFixed(1) + ' KB)');
 console.log('built ' + path.relative(ROOT, r.out) + '  (Pages root redirect -> dist/index.html)');
