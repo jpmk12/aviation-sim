@@ -60,15 +60,17 @@ var GAMES = [
     tint: '#5b6bd6', blurb: 'Launch, fly through space, land a buddy on a planet.' }
 ];
 
-function buildLauncher() {
+// One launcher renderer. hrefPrefix lets the SAME page live at two paths with
+// correct links: '' for dist/index.html (games are siblings), 'dist/' for the
+// repo-root index.html (games live under dist/).
+function renderLauncher(hrefPrefix) {
   var cards = GAMES.map(function (g) {
-    return '<a class="game" href="' + g.href + '" style="--tint:' + g.tint + '">' +
+    return '<a class="game" href="' + hrefPrefix + g.href + '" style="--tint:' + g.tint + '">' +
       '<div class="icon">' + g.icon + '</div>' +
       '<div class="title">' + g.title + '</div>' +
       '<div class="blurb">' + g.blurb + '</div></a>';
   }).join('\n');
-
-  var html = [
+  return [
     '<!doctype html><html lang="en"><head><meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">',
     // don't let Safari / the Home-Screen app cache a stale launcher — this list
@@ -94,31 +96,22 @@ function buildLauncher() {
     '<div class="deck">', cards, '</div>',
     '</body></html>'
   ].join('\n');
+}
 
+function buildLauncher() {
+  var html = renderLauncher('');                 // dist/index.html, sibling links
   var out = path.join(DIST, 'index.html');
   fs.writeFileSync(out, html);
   return { out: out, bytes: Buffer.byteLength(html) };
 }
 
-// GitHub Pages (serving "from a branch") can only publish the repo root or
-// /docs, not dist/. Emit a tiny root index.html that forwards to the launcher
-// so the clean site root (e.g. user.github.io/aviation-sim/) lands on the game,
-// and a .nojekyll so Pages serves the files verbatim.
+// The repo ROOT index.html IS the launcher (not a redirect). GitHub Pages
+// serving "from a branch" publishes the repo root, so user.github.io/<repo>/
+// lands straight on the game menu — no redirect hop to get cached/stale on iOS
+// (a redirect page was exactly what stuck an old target on the Home Screen).
+// links point into dist/.  .nojekyll makes Pages serve files verbatim.
 function buildRootEntry() {
-  var html = [
-    '<!doctype html><html lang="en"><head><meta charset="utf-8">',
-    '<meta name="viewport" content="width=device-width, initial-scale=1">',
-    '<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">',
-    '<meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0">',
-    '<title>Flight Deck</title>',
-    '<meta http-equiv="refresh" content="0; url=./dist/index.html">',
-    '<link rel="canonical" href="./dist/index.html">',
-    '<style>html,body{height:100%;margin:0;font-family:-apple-system,system-ui,sans-serif;',
-    'background:radial-gradient(120% 120% at 50% 0%,#7fc0ff,#3f6fd0);color:#fff;',
-    'display:flex;align-items:center;justify-content:center}a{color:#fff}</style></head>',
-    '<body><p>Loading the Flight Deck… <a href="./dist/index.html">tap here if it doesn’t open</a>.</p>',
-    '<script>location.replace("./dist/index.html")</scr' + 'ipt></body></html>'
-  ].join('\n');
+  var html = renderLauncher('dist/');
   fs.writeFileSync(path.join(ROOT, 'index.html'), html);
   fs.writeFileSync(path.join(ROOT, '.nojekyll'), '');
   return { out: path.join(ROOT, 'index.html'), bytes: Buffer.byteLength(html) };
@@ -132,4 +125,4 @@ var r = buildRootEntry();
 console.log('built ' + path.relative(ROOT, g.out) + '  (' + (g.bytes / 1024 / 1024).toFixed(2) + ' MB)');
 console.log('built ' + path.relative(ROOT, sp.out) + '  (' + (sp.bytes / 1024 / 1024).toFixed(2) + ' MB)');
 console.log('built ' + path.relative(ROOT, l.out) + '  (' + (l.bytes / 1024).toFixed(1) + ' KB)');
-console.log('built ' + path.relative(ROOT, r.out) + '  (Pages root redirect -> dist/index.html)');
+console.log('built ' + path.relative(ROOT, r.out) + '  (Pages root launcher, links -> dist/)');
