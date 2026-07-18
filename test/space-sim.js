@@ -22,7 +22,7 @@ function launch(throttle) {
   var dt = 1 / 60, y = 0, vy = 0, m = C.M_FULL, sep = false, tSpace = -1;
   for (var t = 0; t < 60; t += dt) {
     if (!sep && y >= C.ALT_SEP) { sep = true; m = C.M_LIGHT; }
-    var a = SPACE.launchAccel(throttle, m);
+    var a = SPACE.launchAccel(throttle, m, vy);   // includes climb drag
     vy += a * dt;
     if (vy < 0 && y <= 0) { vy = 0; }        // sits on the pad, no negative sink
     y += vy * dt; if (y < 0) y = 0;

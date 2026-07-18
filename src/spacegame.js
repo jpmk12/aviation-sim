@@ -328,9 +328,10 @@ function boot() {
     var thr = G.ignited ? G.throttle : 0;
     Audio.rumbleTo(thr);
     if (G.ignited) {
-      // a = throttle*THRUST/m - g. Below the hover throttle the rocket slows,
-      // stops, and sinks back to the pad — the whole thrust-vs-gravity lesson.
-      var a = SPACE.launchAccel(thr, mass);
+      // a = throttle*THRUST/m - g - drag(vy). Below the hover throttle the rocket
+      // slows, stops, and sinks back to the pad — the thrust-vs-gravity lesson —
+      // and drag caps the climb speed so the ascent is a real journey.
+      var a = SPACE.launchAccel(thr, mass, l.vy);
       l.vy += a * dt;
       if (l.vy < 0 && l.y <= 0) l.vy = 0;      // hold-down: sits on the pad
       l.y += l.vy * dt; if (l.y < 0) l.y = 0;
@@ -656,6 +657,7 @@ function boot() {
   App.testWarpToPlanet = function () { if (space && G.planet) { var tp = G.planet.pos; space.pos.set(tp[0] * 0.86, tp[1] * 0.86, tp[2] * 0.86); } };
   App.testLandingState = function () { return landing ? { y: landing.y, vy: landing.vy, done: landing.done } : null; };
   App.testLaunchState = function () { return launch ? { y: launch.y, vy: launch.vy, sep: launch.sep, ignited: G.ignited } : null; };
+  App.testWarpToSpace = function () { if (launch) { launch.y = SPACE.C.ALT_SPACE - 15; launch.vy = 120; } }; // skip the climb in tests
 
   UI.init(App, CONFIG);
   resize(); UI.showProfile(); frame();

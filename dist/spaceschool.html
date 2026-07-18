@@ -162,9 +162,16 @@ console.warn( 'Scripts "build/three.js" and "build/three.min.js" are deprecated 
                         //   up and full throttle is genuinely peppy (a≈14 u/s^2),
                         //   then booster sep surges it (a≈42). Threshold teaches
                         //   "push it up to beat gravity" without a sleepy crawl.
-    ALT_SEP: 200,       // booster separation altitude (early, so the surge — the
-                        //   best bit — arrives within a few seconds of liftoff)
-    ALT_SPACE: 1150,    // hand off to the space stage
+    ALT_SEP: 350,       // booster separation altitude (the surge — the best bit)
+    ALT_SPACE: 2600,    // hand off to the space stage — high enough that a full
+                        //   climb is a ~18–20s journey (more flight time), not a
+                        //   10s blip, thanks to the climb-speed cap below
+    // Gentle atmospheric drag on the launch (a = thrust/m - g - K*vy*|vy|). This
+    // lets the rocket punch off the pad but settle to a throttle-controlled
+    // terminal climb speed (~160 u/s at full post-sep) instead of accelerating
+    // without limit — so the ascent lasts, and easing the throttle visibly slows
+    // the climb (and below hover it sinks back). Also gentles the fall-back.
+    K_DRAG_LAUNCH: 0.0013,
 
     // --- SPACE (3D, gentle arcade drift) ----------------------------------
     SPACE_ACCEL: 26,    // forward thrust while the button is held
@@ -190,7 +197,13 @@ console.warn( 'Scripts "build/three.js" and "build/three.min.js" are deprecated 
   // vertical acceleration for launch / landing: throttle in [0,1]
   function vAccel(throttle, mass, g, thrust) { return throttle * thrust / mass - g; }
 
-  function launchAccel(throttle, mass) { return vAccel(throttle, mass, C.G_HOME, C.THRUST_LAUNCH); }
+  // launch adds quadratic drag opposing vertical motion, so thrust settles to a
+  // throttle-controlled climb speed. vy defaults to 0 (drag-free) for callers
+  // that just want the instantaneous thrust-vs-gravity accel (e.g. hover checks).
+  function launchAccel(throttle, mass, vy) {
+    vy = vy || 0;
+    return vAccel(throttle, mass, C.G_HOME, C.THRUST_LAUNCH) - C.K_DRAG_LAUNCH * vy * Math.abs(vy);
+  }
   function landingAccel(throttle, mass, g) { return vAccel(throttle, mass, g, C.THRUST_LAND); }
 
   // touchdown softness -> tier label
@@ -537,9 +550,10 @@ function boot() {
     var thr = G.ignited ? G.throttle : 0;
     Audio.rumbleTo(thr);
     if (G.ignited) {
-      // a = throttle*THRUST/m - g. Below the hover throttle the rocket slows,
-      // stops, and sinks back to the pad — the whole thrust-vs-gravity lesson.
-      var a = SPACE.launchAccel(thr, mass);
+      // a = throttle*THRUST/m - g - drag(vy). Below the hover throttle the rocket
+      // slows, stops, and sinks back to the pad — the thrust-vs-gravity lesson —
+      // and drag caps the climb speed so the ascent is a real journey.
+      var a = SPACE.launchAccel(thr, mass, l.vy);
       l.vy += a * dt;
       if (l.vy < 0 && l.y <= 0) l.vy = 0;      // hold-down: sits on the pad
       l.y += l.vy * dt; if (l.y < 0) l.y = 0;
@@ -865,6 +879,7 @@ function boot() {
   App.testWarpToPlanet = function () { if (space && G.planet) { var tp = G.planet.pos; space.pos.set(tp[0] * 0.86, tp[1] * 0.86, tp[2] * 0.86); } };
   App.testLandingState = function () { return landing ? { y: landing.y, vy: landing.vy, done: landing.done } : null; };
   App.testLaunchState = function () { return launch ? { y: launch.y, vy: launch.vy, sep: launch.sep, ignited: G.ignited } : null; };
+  App.testWarpToSpace = function () { if (launch) { launch.y = SPACE.C.ALT_SPACE - 15; launch.vy = 120; } }; // skip the climb in tests
 
   UI.init(App, CONFIG);
   resize(); UI.showProfile(); frame();

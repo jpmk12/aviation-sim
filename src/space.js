@@ -26,9 +26,16 @@
                         //   up and full throttle is genuinely peppy (a≈14 u/s^2),
                         //   then booster sep surges it (a≈42). Threshold teaches
                         //   "push it up to beat gravity" without a sleepy crawl.
-    ALT_SEP: 200,       // booster separation altitude (early, so the surge — the
-                        //   best bit — arrives within a few seconds of liftoff)
-    ALT_SPACE: 1150,    // hand off to the space stage
+    ALT_SEP: 350,       // booster separation altitude (the surge — the best bit)
+    ALT_SPACE: 2600,    // hand off to the space stage — high enough that a full
+                        //   climb is a ~18–20s journey (more flight time), not a
+                        //   10s blip, thanks to the climb-speed cap below
+    // Gentle atmospheric drag on the launch (a = thrust/m - g - K*vy*|vy|). This
+    // lets the rocket punch off the pad but settle to a throttle-controlled
+    // terminal climb speed (~160 u/s at full post-sep) instead of accelerating
+    // without limit — so the ascent lasts, and easing the throttle visibly slows
+    // the climb (and below hover it sinks back). Also gentles the fall-back.
+    K_DRAG_LAUNCH: 0.0013,
 
     // --- SPACE (3D, gentle arcade drift) ----------------------------------
     SPACE_ACCEL: 26,    // forward thrust while the button is held
@@ -54,7 +61,13 @@
   // vertical acceleration for launch / landing: throttle in [0,1]
   function vAccel(throttle, mass, g, thrust) { return throttle * thrust / mass - g; }
 
-  function launchAccel(throttle, mass) { return vAccel(throttle, mass, C.G_HOME, C.THRUST_LAUNCH); }
+  // launch adds quadratic drag opposing vertical motion, so thrust settles to a
+  // throttle-controlled climb speed. vy defaults to 0 (drag-free) for callers
+  // that just want the instantaneous thrust-vs-gravity accel (e.g. hover checks).
+  function launchAccel(throttle, mass, vy) {
+    vy = vy || 0;
+    return vAccel(throttle, mass, C.G_HOME, C.THRUST_LAUNCH) - C.K_DRAG_LAUNCH * vy * Math.abs(vy);
+  }
   function landingAccel(throttle, mass, g) { return vAccel(throttle, mass, g, C.THRUST_LAND); }
 
   // touchdown softness -> tier label

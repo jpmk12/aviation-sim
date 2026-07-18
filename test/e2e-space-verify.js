@@ -29,12 +29,13 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
   const st1 = await p.evaluate(() => window.SpaceSchool.G.stageName);
   console.log('MENUS buddies=%d planets=%d -> stage=%s', buddies, planets, st1);
 
-  // LAUNCH: ignite + full throttle, wait to reach space
+  // LAUNCH: ignite + full throttle (see it climb), then warp through the long
+  // ascent so the test doesn't have to fly the full ~20s climb in slow software GL.
   await p.evaluate(() => { window.SpaceSchool.actions.ignite(); window.SpaceSchool.actions.setThrottle(1); });
   await sleep(p, 1500);
   await p.screenshot({ path: OUT + '_sp_launch.png' });
   let reachedSpace = false;
-  for (let i = 0; i < 40; i++) { await sleep(p, 500); const s = await p.evaluate(() => window.SpaceSchool.G.stageName); if (s === 'space') { reachedSpace = true; break; } }
+  for (let i = 0; i < 30; i++) { await p.evaluate(() => window.SpaceSchool.testWarpToSpace()); await sleep(p, 400); const s = await p.evaluate(() => window.SpaceSchool.G.stageName); if (s === 'space') { reachedSpace = true; break; } }
   console.log('LAUNCH -> reachedSpace=%s', reachedSpace);
 
   // SPACE: flip some switches, thrust, then warp near planet to trigger landing
