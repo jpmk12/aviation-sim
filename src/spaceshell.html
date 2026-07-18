@@ -55,12 +55,13 @@
   .throttle.retro .throttle-fill { background: linear-gradient(0deg, #ff3b30, #ffb01a); }
   .throttle-knob { position: absolute; left: -6px; right: -6px; bottom: 0; height: 44px; border-radius: 22px;
     background: #fff; box-shadow: 0 3px 10px rgba(0,0,0,.5); }
-  .ignite { position: absolute; right: 8vw; bottom: 12vh; width: 20vh; height: 20vh; min-width: 110px; min-height: 110px;
-    max-width: 190px; max-height: 190px; border-radius: 50%; border: 8px solid #fff; background: #ff3b30; color: #fff;
-    font-size: 6vh; box-shadow: 0 10px 0 #b02017, 0 16px 26px rgba(0,0,0,.4); cursor: pointer; }
-  .ignite:active { transform: translateY(5px); box-shadow: 0 4px 0 #b02017; }
-  .ignite.lit { animation: throb 1s ease-in-out infinite; }
-  @keyframes throb { 0%,100% { box-shadow: 0 10px 0 #b02017, 0 16px 26px rgba(0,0,0,.4); } 50% { box-shadow: 0 10px 0 #b02017, 0 0 0 12px rgba(255,59,48,.3), 0 16px 26px rgba(0,0,0,.4); } }
+  .launchbtn { position: absolute; right: 8vw; bottom: 14vh; width: 24vh; height: 24vh; min-width: 130px; min-height: 130px;
+    max-width: 210px; max-height: 210px; border-radius: 50%; border: 8px solid #fff; background: #ff3b30; color: #fff;
+    font-size: 9vh; box-shadow: 0 10px 0 #b02017, 0 16px 26px rgba(0,0,0,.4); cursor: pointer;
+    animation: throb 1.1s ease-in-out infinite; }
+  .launchbtn:active { transform: translateY(5px); box-shadow: 0 4px 0 #b02017; }
+  .launchbtn.gone { display: none; }
+  @keyframes throb { 0%,100% { box-shadow: 0 10px 0 #b02017, 0 16px 26px rgba(0,0,0,.4); } 50% { box-shadow: 0 10px 0 #b02017, 0 0 0 14px rgba(255,59,48,.35), 0 16px 26px rgba(0,0,0,.4); } }
 
   .hint { position: absolute; font-size: 42px; opacity: .55; pointer-events: none; animation: bob 1.4s ease-in-out infinite; }
   .hint-launch { left: calc(6vw + 24px); bottom: 54vh; }
