@@ -81,8 +81,32 @@ function buildLauncher() {
   return { out: out, bytes: Buffer.byteLength(html) };
 }
 
+// GitHub Pages (serving "from a branch") can only publish the repo root or
+// /docs, not dist/. Emit a tiny root index.html that forwards to the launcher
+// so the clean site root (e.g. user.github.io/aviation-sim/) lands on the game,
+// and a .nojekyll so Pages serves the files verbatim.
+function buildRootEntry() {
+  var html = [
+    '<!doctype html><html lang="en"><head><meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    '<title>Flight Deck</title>',
+    '<meta http-equiv="refresh" content="0; url=./dist/index.html">',
+    '<link rel="canonical" href="./dist/index.html">',
+    '<style>html,body{height:100%;margin:0;font-family:-apple-system,system-ui,sans-serif;',
+    'background:radial-gradient(120% 120% at 50% 0%,#7fc0ff,#3f6fd0);color:#fff;',
+    'display:flex;align-items:center;justify-content:center}a{color:#fff}</style></head>',
+    '<body><p>Loading the Flight Deck… <a href="./dist/index.html">tap here if it doesn’t open</a>.</p>',
+    '<script>location.replace("./dist/index.html")</scr' + 'ipt></body></html>'
+  ].join('\n');
+  fs.writeFileSync(path.join(ROOT, 'index.html'), html);
+  fs.writeFileSync(path.join(ROOT, '.nojekyll'), '');
+  return { out: path.join(ROOT, 'index.html'), bytes: Buffer.byteLength(html) };
+}
+
 if (!fs.existsSync(DIST)) fs.mkdirSync(DIST, { recursive: true });
 var g = buildGame();
 var l = buildLauncher();
+var r = buildRootEntry();
 console.log('built ' + path.relative(ROOT, g.out) + '  (' + (g.bytes / 1024 / 1024).toFixed(2) + ' MB)');
 console.log('built ' + path.relative(ROOT, l.out) + '  (' + (l.bytes / 1024).toFixed(1) + ' KB)');
+console.log('built ' + path.relative(ROOT, r.out) + '  (Pages root redirect -> dist/index.html)');
