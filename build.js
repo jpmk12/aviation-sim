@@ -71,6 +71,10 @@ function buildLauncher() {
   var html = [
     '<!doctype html><html lang="en"><head><meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">',
+    // don't let Safari / the Home-Screen app cache a stale launcher — this list
+    // of games changes, and a cached copy is exactly why a new game "isn't there"
+    '<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">',
+    '<meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0">',
     '<meta name="apple-mobile-web-app-capable" content="yes"><title>Kids Flight Deck</title>',
     '<style>',
     '*{margin:0;padding:0;box-sizing:border-box}html,body{height:100%;font-family:-apple-system,system-ui,sans-serif;',
@@ -104,6 +108,8 @@ function buildRootEntry() {
   var html = [
     '<!doctype html><html lang="en"><head><meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    '<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">',
+    '<meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0">',
     '<title>Flight Deck</title>',
     '<meta http-equiv="refresh" content="0; url=./dist/index.html">',
     '<link rel="canonical" href="./dist/index.html">',
