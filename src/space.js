@@ -58,17 +58,18 @@
                         //   the retro thruster that lets you slow down to dock
 
     // --- LAUNCH ATTITUDE (keep the rocket climbing straight) ---------------
-    // Deliberately GENTLE: the wind nudges the rocket only slightly off vertical
-    // and the tilt control is a fine trim, so it needs small corrections, never
-    // big saves. (Retuned after the first pass felt too twitchy.)
-    ATT_MAX: 0.22,      // rad — most the rocket can lean either way (~13°)
-    ATT_RATE: 0.28,     // rad/s the tilt control trims it while held (fine, slow)
-    ATT_DRIFT: 0.075,   // rad/s wind-gust wander to correct against (small,
-                        //   bounded, oscillatory — never runs away on its own)
-    ATT_BAND: 0.11,     // rad — within this of vertical = full climb efficiency
-    ATT_EFF_MIN: 0.6,   // climb efficiency when fully off attitude. NEVER 0: a
+    // VERY gentle: the wind barely nudges the rocket, the tilt control is a slow
+    // fine trim, and the rocket eases back toward vertical on its own — so it
+    // only ever needs tiny corrections, never a fight. (Softened twice.)
+    ATT_MAX: 0.16,      // rad — most the rocket can lean either way (~9°)
+    ATT_RATE: 0.15,     // rad/s the tilt control trims it while held (slow, fine)
+    ATT_DRIFT: 0.045,   // rad/s wind-gust wander (tiny, bounded, oscillatory)
+    ATT_RETURN: 0.10,   // rad/s the rocket self-centres toward vertical when the
+                        //   tilt control is released (forgiving — never lost)
+    ATT_BAND: 0.085,    // rad — within this of vertical = full climb efficiency
+    ATT_EFF_MIN: 0.65,  // climb efficiency when fully off attitude. NEVER 0: a
                         //   sloppy ascent is slower, not a failure (still climbs
-                        //   at full throttle, since 0.6 clears the hover point)
+                        //   at full throttle, since it clears the hover point)
 
     // --- LANDING (1D vertical + small lateral) ----------------------------
     THRUST_LAND: 22,    // retro force; hover throttle ~ m*g/THRUST
@@ -92,6 +93,16 @@
   }
   function landingAccel(throttle, mass, g) { return vAccel(throttle, mass, g, C.THRUST_LAND); }
 
+  // The landing throttle lever is HOVER-CENTRED for fine control: the middle of
+  // the lever (0.5) holds altitude (thrust == weight), the top half is a gentle
+  // climb, the bottom half a gentle descent. This spreads the useful thrust over
+  // the whole lever, so a small nudge is a small change — instead of a twitchy
+  // band just above zero where a tiny move rockets you up.
+  function hoverThrottle(mass, g) { return clamp(mass * g / C.THRUST_LAND, 0.08, 0.92); }
+  function leverToThrottle(lever, hover) {
+    return lever <= 0.5 ? (lever / 0.5) * hover : hover + ((lever - 0.5) / 0.5) * (1 - hover);
+  }
+
   // launch attitude -> climb efficiency (1 = dead-on vertical, ATT_EFF_MIN =
   // fully off). Multiplies effective throttle so a straight ascent reaches space
   // faster while a leaning one just dawdles — never sinks at full throttle.
@@ -111,6 +122,6 @@
   return {
     C: C, clamp: clamp,
     launchAccel: launchAccel, landingAccel: landingAccel, landingTier: landingTier,
-    launchClimbEff: launchClimbEff
+    launchClimbEff: launchClimbEff, hoverThrottle: hoverThrottle, leverToThrottle: leverToThrottle
   };
 }));

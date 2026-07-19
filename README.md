@@ -87,7 +87,8 @@ Three stages, one journey: **launch → space → land.**
 3. **Land** — a clear cockpit: the **altitude gauge** (left) shows how high you
    are and turns amber→red if you're falling too fast, the **◀ ▶ steer buttons**
    walk you left/right to line the 🛸 up over the **pad** (top strip glows green
-   when you're over it), and the **🔥 retro lever** (right) slows your fall.
+   when you're over it), and the **🔥 retro lever** (right) slows your fall — its
+   **middle (green line) holds you steady**, so small nudges make small changes.
    Feather it onto the pad for confetti (any landing is a happy one). Your buddy
    hops out and lives on that planet forever, visible from orbit on your next trip.
 

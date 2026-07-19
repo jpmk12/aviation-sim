@@ -500,6 +500,8 @@ function boot() {
     if (G.ignited && l.y > 1) {
       var gust = Math.sin(G.t * 0.55) * 0.6 + Math.sin(G.t * 1.3 + 2.0) * 0.4;   // ~[-1,1]
       l.att += (gust * SPACE.C.ATT_DRIFT + (G.pitch || 0) * SPACE.C.ATT_RATE) * dt;
+      // self-centre toward vertical when the tilt control is released (forgiving)
+      if (Math.abs(G.pitch || 0) < 0.05) l.att -= Math.sign(l.att) * Math.min(Math.abs(l.att), SPACE.C.ATT_RETURN * dt);
       l.att = clamp(l.att, -SPACE.C.ATT_MAX, SPACE.C.ATT_MAX);
       eff = SPACE.launchClimbEff(l.att);
     }
@@ -904,9 +906,13 @@ function boot() {
     var l = landing; if (!l) return;
     var mass = 1.0 + (G.buddy ? G.buddy.mass : 0);
     if (!l.done) {
-      var thr = G.throttle;
+      var thr = G.throttle;                                   // the raw lever (0..1)
       Audio.rumbleTo(thr * 0.8);
-      var a = SPACE.landingAccel(thr, mass, G.planet.gravity);
+      // hover-centred lever -> actual throttle: middle of the lever holds
+      // altitude, so small nudges make small, controllable changes
+      var hov = SPACE.hoverThrottle(mass, G.planet.gravity);
+      var eff = SPACE.leverToThrottle(thr, hov);
+      var a = SPACE.landingAccel(eff, mass, G.planet.gravity);
       l.vy += a * dt; l.y += l.vy * dt;
       // small lateral nudge to line up with the pad (x=0)
       l.vx += (G.nudge * 14) * dt; l.vx *= (1 - 1.2 * dt); l.x += l.vx * dt;
@@ -1383,6 +1389,7 @@ var UI = (function () {
     // retro throttle lever (right): drag up to burn harder and slow the fall
     var wrap = el('div', 'throttle retro', hud); wrap.dataset.btn = '1';
     var fill = el('div', 'throttle-fill', wrap); var knob = el('div', 'throttle-knob', wrap);
+    el('div', 'throttle-hover', wrap);                 // mid-lever = hold altitude
     el('div', 'throttle-cap', wrap).textContent = '🔥';
     var dragging = false;
     function setFromY(y) { var r = wrap.getBoundingClientRect(); var v = clamp(1 - (y - r.top) / r.height, 0, 1); app.actions.setThrottle(v); fill.style.height = (v * 100) + '%'; knob.style.bottom = 'calc(' + (v * 100) + '% - 22px)'; }

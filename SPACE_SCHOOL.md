@@ -105,7 +105,10 @@ your fall speed (green safe → amber → red "burn!"), big **◀ ▶ steer butt
 (bottom) to walk left/right, and the **🔥 retro lever** (right) for descent. The
 touchdown **pad is offset** to one side each time and a top **steer-to-pad strip**
 glows green when you're lined up over it — so "find the spot, then set down soft"
-is a real, wordless task. Soft **and** on the pad = confetti.)*
+is a real, wordless task. Soft **and** on the pad = confetti. The retro lever is
+**hover-centred** (middle = hold altitude, marked with a green line) so small
+nudges give fine, symmetric control instead of a twitchy band — see
+`SPACE.hoverThrottle` / `SPACE.leverToThrottle`.)*
 
 ## 3. THE LOOP & RETENTION
 Pick pilot → pick a **buddy** + a **planet** → launch → fly → land → the buddy

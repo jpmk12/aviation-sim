@@ -124,10 +124,10 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
   for (let i = 0; i < 120; i++) {
     const st = await p.evaluate(() => window.SpaceSchool.testLandingState());
     if (st) {
-      const wantVy = st.y > 45 ? -20 : -4;   // descend briskly, flare at the bottom
-      const hover = (1.0 + 0.6) * 5.5 / 22;   // m*g/THRUST
-      const thr = Math.max(0, Math.min(1, hover + (wantVy - st.vy) * 0.06));
-      await p.evaluate((t) => window.SpaceSchool.actions.setThrottle(t), thr);
+      // hover-centred lever: 0.5 holds altitude; nudge around it to control vy
+      const wantVy = st.y > 45 ? -18 : -4;   // descend briskly, flare at the bottom
+      const lever = Math.max(0, Math.min(1, 0.5 + (wantVy - st.vy) * 0.05));
+      await p.evaluate((t) => window.SpaceSchool.actions.setThrottle(t), lever);
     }
     await sleep(p, 150);
     delivered = await p.evaluate(() => window.SpaceSchool.G.save.deliveries.length);

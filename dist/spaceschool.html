@@ -77,6 +77,9 @@
 
   /* throttle cap glyph (retro lever) */
   .throttle-cap { position: absolute; top: -6vh; left: 50%; transform: translateX(-50%); font-size: 34px; pointer-events: none; }
+  /* hover mark on the retro lever — the middle holds altitude (fine control) */
+  .throttle-hover { position: absolute; left: -8px; right: -8px; bottom: 50%; height: 4px;
+    background: #7fd858; border-radius: 2px; box-shadow: 0 0 8px rgba(127,216,88,.7); pointer-events: none; }
 
   /* --- lander: altitude gauge, steer-to-pad strip, steer buttons --- */
   .altgauge { position: absolute; left: 4vw; top: 12vh; width: 60px; height: 60vh; max-height: 480px;
@@ -342,17 +345,18 @@ console.warn( 'Scripts "build/three.js" and "build/three.min.js" are deprecated 
                         //   the retro thruster that lets you slow down to dock
 
     // --- LAUNCH ATTITUDE (keep the rocket climbing straight) ---------------
-    // Deliberately GENTLE: the wind nudges the rocket only slightly off vertical
-    // and the tilt control is a fine trim, so it needs small corrections, never
-    // big saves. (Retuned after the first pass felt too twitchy.)
-    ATT_MAX: 0.22,      // rad — most the rocket can lean either way (~13°)
-    ATT_RATE: 0.28,     // rad/s the tilt control trims it while held (fine, slow)
-    ATT_DRIFT: 0.075,   // rad/s wind-gust wander to correct against (small,
-                        //   bounded, oscillatory — never runs away on its own)
-    ATT_BAND: 0.11,     // rad — within this of vertical = full climb efficiency
-    ATT_EFF_MIN: 0.6,   // climb efficiency when fully off attitude. NEVER 0: a
+    // VERY gentle: the wind barely nudges the rocket, the tilt control is a slow
+    // fine trim, and the rocket eases back toward vertical on its own — so it
+    // only ever needs tiny corrections, never a fight. (Softened twice.)
+    ATT_MAX: 0.16,      // rad — most the rocket can lean either way (~9°)
+    ATT_RATE: 0.15,     // rad/s the tilt control trims it while held (slow, fine)
+    ATT_DRIFT: 0.045,   // rad/s wind-gust wander (tiny, bounded, oscillatory)
+    ATT_RETURN: 0.10,   // rad/s the rocket self-centres toward vertical when the
+                        //   tilt control is released (forgiving — never lost)
+    ATT_BAND: 0.085,    // rad — within this of vertical = full climb efficiency
+    ATT_EFF_MIN: 0.65,  // climb efficiency when fully off attitude. NEVER 0: a
                         //   sloppy ascent is slower, not a failure (still climbs
-                        //   at full throttle, since 0.6 clears the hover point)
+                        //   at full throttle, since it clears the hover point)
 
     // --- LANDING (1D vertical + small lateral) ----------------------------
     THRUST_LAND: 22,    // retro force; hover throttle ~ m*g/THRUST
@@ -376,6 +380,16 @@ console.warn( 'Scripts "build/three.js" and "build/three.min.js" are deprecated 
   }
   function landingAccel(throttle, mass, g) { return vAccel(throttle, mass, g, C.THRUST_LAND); }
 
+  // The landing throttle lever is HOVER-CENTRED for fine control: the middle of
+  // the lever (0.5) holds altitude (thrust == weight), the top half is a gentle
+  // climb, the bottom half a gentle descent. This spreads the useful thrust over
+  // the whole lever, so a small nudge is a small change — instead of a twitchy
+  // band just above zero where a tiny move rockets you up.
+  function hoverThrottle(mass, g) { return clamp(mass * g / C.THRUST_LAND, 0.08, 0.92); }
+  function leverToThrottle(lever, hover) {
+    return lever <= 0.5 ? (lever / 0.5) * hover : hover + ((lever - 0.5) / 0.5) * (1 - hover);
+  }
+
   // launch attitude -> climb efficiency (1 = dead-on vertical, ATT_EFF_MIN =
   // fully off). Multiplies effective throttle so a straight ascent reaches space
   // faster while a leaning one just dawdles — never sinks at full throttle.
@@ -395,7 +409,7 @@ console.warn( 'Scripts "build/three.js" and "build/three.min.js" are deprecated 
   return {
     C: C, clamp: clamp,
     launchAccel: launchAccel, landingAccel: landingAccel, landingTier: landingTier,
-    launchClimbEff: launchClimbEff
+    launchClimbEff: launchClimbEff, hoverThrottle: hoverThrottle, leverToThrottle: leverToThrottle
   };
 }));
 
@@ -903,6 +917,8 @@ function boot() {
     if (G.ignited && l.y > 1) {
       var gust = Math.sin(G.t * 0.55) * 0.6 + Math.sin(G.t * 1.3 + 2.0) * 0.4;   // ~[-1,1]
       l.att += (gust * SPACE.C.ATT_DRIFT + (G.pitch || 0) * SPACE.C.ATT_RATE) * dt;
+      // self-centre toward vertical when the tilt control is released (forgiving)
+      if (Math.abs(G.pitch || 0) < 0.05) l.att -= Math.sign(l.att) * Math.min(Math.abs(l.att), SPACE.C.ATT_RETURN * dt);
       l.att = clamp(l.att, -SPACE.C.ATT_MAX, SPACE.C.ATT_MAX);
       eff = SPACE.launchClimbEff(l.att);
     }
@@ -1307,9 +1323,13 @@ function boot() {
     var l = landing; if (!l) return;
     var mass = 1.0 + (G.buddy ? G.buddy.mass : 0);
     if (!l.done) {
-      var thr = G.throttle;
+      var thr = G.throttle;                                   // the raw lever (0..1)
       Audio.rumbleTo(thr * 0.8);
-      var a = SPACE.landingAccel(thr, mass, G.planet.gravity);
+      // hover-centred lever -> actual throttle: middle of the lever holds
+      // altitude, so small nudges make small, controllable changes
+      var hov = SPACE.hoverThrottle(mass, G.planet.gravity);
+      var eff = SPACE.leverToThrottle(thr, hov);
+      var a = SPACE.landingAccel(eff, mass, G.planet.gravity);
       l.vy += a * dt; l.y += l.vy * dt;
       // small lateral nudge to line up with the pad (x=0)
       l.vx += (G.nudge * 14) * dt; l.vx *= (1 - 1.2 * dt); l.x += l.vx * dt;
@@ -1786,6 +1806,7 @@ var UI = (function () {
     // retro throttle lever (right): drag up to burn harder and slow the fall
     var wrap = el('div', 'throttle retro', hud); wrap.dataset.btn = '1';
     var fill = el('div', 'throttle-fill', wrap); var knob = el('div', 'throttle-knob', wrap);
+    el('div', 'throttle-hover', wrap);                 // mid-lever = hold altitude
     el('div', 'throttle-cap', wrap).textContent = '🔥';
     var dragging = false;
     function setFromY(y) { var r = wrap.getBoundingClientRect(); var v = clamp(1 - (y - r.top) / r.height, 0, 1); app.actions.setThrottle(v); fill.style.height = (v * 100) + '%'; knob.style.bottom = 'calc(' + (v * 100) + '% - 22px)'; }
