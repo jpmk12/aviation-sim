@@ -38,6 +38,14 @@ Launch and landing bookend each other (thrust vs gravity); space is the drift.
   space. Auto-transition to the space stage at altitude.
 - Rumble, fire, screen-shake all scale with throttle.
 
+*(As-built beyond v1: the launch camera pulls in **close** so the SLS fills the
+frame, and an **attitude minigame** adds a second input — a gentle wind leans
+the rocket off vertical, and left/right **tilt buttons** + a top-centre "keep the
+🚀 in the green zone" indicator let the child fly it straight. Staying aligned
+trims the effective throttle up so it climbs to space sooner; a sloppy attitude
+just dawdles and never fails — see `SPACE.launchClimbEff` and `src/space.js`
+ATT\_\* constants.)*
+
 ### 2.2 Space (first-person cockpit — the centrepiece)
 - **Dashboard cockpit**: the 3D scene is the window; a panel of chunky **switches
   and lit buttons** frames it. Flipping them is the toy the north star asks for.
@@ -70,6 +78,13 @@ Launch and landing bookend each other (thrust vs gravity); space is the drift.
   sky forever** with a triumphant chime and its icon. Per profile, across
   sessions — the delivered-creatures retention loop, aimed upward.
 - Approach the destination planet → landing stage.
+
+*(As-built beyond v1: the cockpit is restyled to evoke the **Apollo command
+module** — a metallic grey console with round gauges, a green **DSKY numeric
+speed readout** (amber when too fast to dock, green when slow enough, mirroring
+the ring light) and DOCK/FAST lamps, and metallic toggle switches. Docking gains
+a red 🛑 **brake / retro thruster** opposite the blue 🚀 thrust, so slowing to
+match speeds is a deliberate act — `SPACE.C.BRAKE_DAMP` in `src/space.js`.)*
 
 ### 2.3 Landing (3/4 external view — retro-burn)
 - 3/4 view of the craft descending toward a **landing pad**; the child

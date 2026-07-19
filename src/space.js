@@ -53,6 +53,18 @@
     DOCK_RADIUS: 46,    // within this of the dock ring = an arrival
     DOCK_SPEED: 26,     // arrive slower than this = dock; faster = boing bounce
                         //   (the lesson: docking means MATCHING speeds, gently)
+    BRAKE_DAMP: 2.6,    // per-second velocity damping while the brake is held —
+                        //   the retro thruster that lets you slow down to dock
+
+    // --- LAUNCH ATTITUDE (keep the rocket climbing straight) ---------------
+    ATT_MAX: 0.4,       // rad — most the rocket can lean either way (~23°)
+    ATT_RATE: 1.0,      // rad/s the tilt control swings it while held
+    ATT_DRIFT: 0.26,    // rad/s wind-gust wander to correct against (bounded,
+                        //   oscillatory — the rocket never runs away on its own)
+    ATT_BAND: 0.16,     // rad — within this of vertical = full climb efficiency
+    ATT_EFF_MIN: 0.55,  // climb efficiency when fully off attitude. NEVER 0: a
+                        //   sloppy ascent is slower, not a failure (still climbs
+                        //   at full throttle, since 0.55 clears the hover point)
 
     // --- LANDING (1D vertical + small lateral) ----------------------------
     THRUST_LAND: 22,    // retro force; hover throttle ~ m*g/THRUST
@@ -76,6 +88,16 @@
   }
   function landingAccel(throttle, mass, g) { return vAccel(throttle, mass, g, C.THRUST_LAND); }
 
+  // launch attitude -> climb efficiency (1 = dead-on vertical, ATT_EFF_MIN =
+  // fully off). Multiplies effective throttle so a straight ascent reaches space
+  // faster while a leaning one just dawdles — never sinks at full throttle.
+  function launchClimbEff(att) {
+    var off = Math.abs(att);
+    if (off <= C.ATT_BAND) return 1;
+    var t = clamp((off - C.ATT_BAND) / (C.ATT_MAX - C.ATT_BAND), 0, 1);
+    return 1 - (1 - C.ATT_EFF_MIN) * t;
+  }
+
   // touchdown softness -> tier label
   function landingTier(vyImpact) {
     var s = Math.abs(vyImpact);
@@ -84,6 +106,7 @@
 
   return {
     C: C, clamp: clamp,
-    launchAccel: launchAccel, landingAccel: landingAccel, landingTier: landingTier
+    launchAccel: launchAccel, landingAccel: landingAccel, landingTier: landingTier,
+    launchClimbEff: launchClimbEff
   };
 }));

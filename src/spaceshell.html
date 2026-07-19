@@ -75,27 +75,75 @@
     background: rgba(20,30,60,.5); color: #fff; font-size: 30px; }
   .nudgebtn:active { transform: scale(.9); background: #ffd23f; color: #223; }
 
+  /* launch attitude indicator — keep the marker in the green zone by tilting */
+  .attind { position: absolute; top: calc(9vh + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+    width: min(62vw, 440px); height: 46px; border-radius: 24px; background: rgba(10,16,34,.45);
+    border: 2px solid rgba(255,255,255,.3); backdrop-filter: blur(3px); }
+  .attind.ok { border-color: rgba(127,216,88,.9); box-shadow: 0 0 14px rgba(127,216,88,.5); }
+  .attind-zone { position: absolute; left: 50%; top: 0; bottom: 0; width: 22%; transform: translateX(-50%);
+    background: rgba(127,216,88,.2); border-left: 2px dashed rgba(127,216,88,.7); border-right: 2px dashed rgba(127,216,88,.7); }
+  .attind-marker { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent;
+    border-bottom: 20px solid #ffb01a; transition: left .08s linear; }
+  .attind-marker.ok { border-bottom-color: #7fd858; }
+
+  /* launch tilt buttons (attitude control), bottom-right */
+  .tilt { position: absolute; right: 6vw; bottom: 8vh; display: flex; gap: 14px; }
+  .tiltbtn { width: 78px; height: 78px; border-radius: 18px; border: 4px solid rgba(255,255,255,.8);
+    background: rgba(20,30,60,.5); color: #fff; font-size: 34px; cursor: pointer; }
+  .tiltbtn:active, .tiltbtn.on { transform: scale(.9); background: #ffd23f; color: #223; }
+
   /* ---- space cockpit ---- */
   .cockpit-frame { position: absolute; inset: 0; pointer-events: none;
     box-shadow: inset 0 0 90px 30px rgba(0,0,10,.65); border-bottom: 0 solid transparent; }
   .cockpit-glow { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .3s;
     background: radial-gradient(120% 60% at 50% 100%, rgba(120,180,255,.22), transparent 70%); }
+  /* Apollo-style console: metallic gray panel, gauges, DSKY, toggle switches */
   .dashboard { position: absolute; left: 0; right: 0; bottom: 0; height: 22vh; min-height: 130px;
     background: linear-gradient(0deg, #10131f 60%, #171b2c 100%); border-top: 4px solid #2b3350;
     border-radius: 40px 40px 0 0 / 30px 30px 0 0; display: flex; flex-direction: column; align-items: center;
     justify-content: center; gap: 8px; box-shadow: 0 -8px 30px rgba(0,0,0,.5); }
-  .bulbs { display: flex; gap: 12px; }
-  .bulb { width: 16px; height: 16px; border-radius: 50%; background: #2a3350; box-shadow: inset 0 -2px 0 rgba(0,0,0,.4); }
+  .dashboard.apollo { flex-direction: row; align-items: center; justify-content: space-around; gap: 2vw;
+    padding: 0 4vw; height: 24vh; min-height: 150px; border-radius: 0;
+    background: linear-gradient(0deg, #6d727b 0%, #9a9fa8 46%, #c2c7cf 100%);
+    border-top: 5px solid #565b63;
+    box-shadow: inset 0 4px 0 rgba(255,255,255,.45), inset 0 -3px 8px rgba(0,0,0,.35), 0 -8px 30px rgba(0,0,0,.5); }
+  .gaugecluster, .rightcluster { display: flex; align-items: center; gap: 14px; }
+  .rightcluster { flex-direction: column; gap: 8px; }
+  .gauge { position: relative; width: 66px; height: 66px; border-radius: 50%; background: radial-gradient(circle at 50% 40%, #1a2130, #0a0e16);
+    border: 5px solid #cdd2da; box-shadow: inset 0 0 10px rgba(0,0,0,.9), 0 2px 4px rgba(0,0,0,.5); }
+  .gauge-face { position: absolute; inset: 8px; border-radius: 50%;
+    background: conic-gradient(from -120deg, #2b6f3a 0deg, #2b6f3a 150deg, #7a5a1f 150deg, #7a3320 240deg, transparent 240deg); opacity: .55; }
+  .gauge-needle { position: absolute; left: 50%; bottom: 50%; width: 3px; height: 25px; margin-left: -1.5px;
+    background: #ff5a3a; border-radius: 2px; transform-origin: bottom center; transition: transform .12s ease-out; }
+  .gauge-hub { position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #e6e9ee; }
+  .dsky { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 14px;
+    background: #0a1410; border: 4px solid #565b63; border-radius: 8px; box-shadow: inset 0 0 12px rgba(0,0,0,.9); }
+  .dsky-label { font-size: 10px; letter-spacing: 3px; color: #5cff8a; opacity: .55; font-weight: 700; }
+  .dsky-num { font-family: 'Courier New', monospace; font-weight: 800; font-size: clamp(26px, 5.6vh, 44px);
+    letter-spacing: 3px; color: #3bff6a; text-shadow: 0 0 8px rgba(59,255,106,.7); line-height: 1; opacity: .85; }
+  .dsky-num.ok { color: #3bff6a; opacity: 1; }
+  .dsky-num.hot { color: #ffb01a; text-shadow: 0 0 8px rgba(255,176,26,.75); opacity: 1; }
+  .dsky-lamps { display: flex; gap: 8px; }
+  .dsky-lamp { width: 32px; height: 11px; border-radius: 3px; background: #1a2230; box-shadow: inset 0 0 3px rgba(0,0,0,.8); }
+  .dsky-lamp.dock.lit { background: #3bff6a; box-shadow: 0 0 10px #3bff6a; }
+  .dsky-lamp.fast.lit { background: #ffb01a; box-shadow: 0 0 10px #ffb01a; }
+  .bulbs { display: flex; gap: 10px; }
+  .bulb { width: 15px; height: 15px; border-radius: 50%; background: #3a3f47; box-shadow: inset 0 -2px 0 rgba(0,0,0,.5), inset 0 1px 1px rgba(255,255,255,.3); }
   .bulb.lit { background: #ffe066; box-shadow: 0 0 10px #ffe066; }
-  .switches { display: flex; gap: 14px; }
-  .switch { width: 60px; height: 60px; border-radius: 14px; border: 3px solid #3a4463;
-    background: #222a42; color: #fff; font-size: 26px; box-shadow: inset 0 -4px 0 rgba(0,0,0,.4); cursor: pointer; }
+  .switches { display: flex; gap: 10px; }
+  .switch { width: 50px; height: 50px; border-radius: 10px; border: 3px solid #565b63;
+    background: linear-gradient(#3b4148, #23272e); color: #fff; font-size: 22px; box-shadow: inset 0 -3px 0 rgba(0,0,0,.5), 0 1px 0 rgba(255,255,255,.35); cursor: pointer; }
   .switch:active { transform: translateY(2px); }
-  .switch.on { background: #ffd23f; color: #223; box-shadow: 0 0 0 4px rgba(255,210,63,.35); }
-  .thrust { position: absolute; right: 5vw; bottom: 26vh; width: 22vh; height: 22vh; min-width: 120px; min-height: 120px;
-    max-width: 200px; max-height: 200px; border-radius: 50%; border: 8px solid #fff; background: #2f7fe6; color: #fff;
-    font-size: 7vh; box-shadow: 0 10px 0 #1c5bb0, 0 16px 26px rgba(0,0,0,.4); cursor: pointer; }
+  .switch.on { background: #ffd23f; color: #223; box-shadow: 0 0 0 4px rgba(255,210,63,.4); }
+  .thrust { position: absolute; right: 5vw; bottom: 27vh; width: 20vh; height: 20vh; min-width: 120px; min-height: 120px;
+    max-width: 190px; max-height: 190px; border-radius: 50%; border: 8px solid #fff; background: #2f7fe6; color: #fff;
+    font-size: 7vh; box-shadow: 0 10px 0 #1c5bb0, 0 16px 26px rgba(0,0,0,.4); cursor: pointer; z-index: 16; }
   .thrust:active, .thrust.on { transform: translateY(5px) scale(.97); box-shadow: 0 4px 0 #1c5bb0, 0 0 0 10px rgba(47,127,230,.3); }
+  .brake { position: absolute; left: 5vw; bottom: 27vh; width: 20vh; height: 20vh; min-width: 120px; min-height: 120px;
+    max-width: 190px; max-height: 190px; border-radius: 50%; border: 8px solid #fff; background: #e0392b; color: #fff;
+    font-size: 7vh; box-shadow: 0 10px 0 #a0231a, 0 16px 26px rgba(0,0,0,.4); cursor: pointer; z-index: 16; }
+  .brake:active, .brake.on { transform: translateY(5px) scale(.97); box-shadow: 0 4px 0 #a0231a, 0 0 0 10px rgba(224,57,43,.3); }
   .starcount { position: absolute; top: calc(2vh + env(safe-area-inset-top)); right: 4vw; color: #ffe066;
     font-size: clamp(20px, 4vh, 34px); font-weight: 800; text-shadow: 0 2px 4px rgba(0,0,0,.6); }
   /* the star-chart: current constellation filling in, top-left */

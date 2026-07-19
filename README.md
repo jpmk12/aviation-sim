@@ -69,13 +69,18 @@ Three stages, one journey: **launch → space → land.**
 </p>
 
 1. **Launch** — press 🚀 for the countdown, then shove the throttle up to beat
-   gravity (a timid push just rumbles on the pad), watch the boosters separate
-   and the sky fade to stars.
-2. **Space** — a first-person cockpit full of flip-for-fun **switches and buttons**
-   (lights, comms, warp, music…). First goal: **dock with the space station** —
-   glide into the ring while it glows green (green = slow enough; too fast and
-   you boing right off). Clunk, cheer, push-off — then follow the beacon to your
-   planet, scooping **stars** and bonking harmlessly off asteroids on the way.
+   gravity (a timid push just rumbles on the pad). The rocket fills the screen,
+   and a **tilt control** lets you keep it climbing straight — hold the 🚀 in the
+   green zone and it climbs faster; let the wind lean it and you just dawdle (you
+   never fall). Watch the boosters separate and the sky fade to stars.
+2. **Space** — a first-person **Apollo-style cockpit**: a metal panel with round
+   gauges, a green **DSKY speed readout**, and flip-for-fun **switches** (lights,
+   comms, warp, music…). First goal: **dock with the space station** — glide into
+   the ring while it glows green, using the blue 🚀 **thrust** to speed up and the
+   red 🛑 **brake** to slow down (green = slow enough; too fast and you boing right
+   off — the DSKY turns amber to warn you). Clunk, cheer, push-off — then follow
+   the beacon to your planet, scooping **stars** and bonking harmlessly off
+   asteroids on the way.
    Every star you scoop lights up a **constellation** in the sky (watch the
    little chart, top-left) — finish one and it glows gold up there forever.
 3. **Land** — retro-burn to slow your fall against the planet's gravity. Feather

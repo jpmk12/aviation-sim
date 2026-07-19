@@ -33,6 +33,15 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
   // ascent so the test doesn't have to fly the full ~20s climb in slow software GL.
   await p.evaluate(() => { window.SpaceSchool.actions.ignite(); window.SpaceSchool.actions.setThrottle(1); });
   await sleep(p, 1500);
+  // ATTITUDE control: the tilt indicator exists, and the tilt control leans the rocket
+  const attInd = await p.evaluate(() => !!document.querySelector('.attind'));
+  const att0 = await p.evaluate(() => window.SpaceSchool.testLaunchState().att);
+  await p.evaluate(() => window.SpaceSchool.actions.setPitch(1));
+  for (let i = 0; i < 8; i++) { await sleep(p, 200); }
+  const att1 = await p.evaluate(() => window.SpaceSchool.testLaunchState().att);
+  await p.evaluate(() => window.SpaceSchool.actions.setPitch(0));
+  const attitudeWorks = attInd && Math.abs(att1) > Math.abs(att0) + 0.05;
+  console.log('ATTITUDE indicator=%s att %s -> %s works=%s', attInd, att0.toFixed(2), att1.toFixed(2), attitudeWorks);
   await p.screenshot({ path: OUT + '_sp_launch.png' });
   let reachedSpace = false;
   for (let i = 0; i < 30; i++) { await p.evaluate(() => window.SpaceSchool.testWarpToSpace()); await sleep(p, 400); const s = await p.evaluate(() => window.SpaceSchool.G.stageName); if (s === 'space') { reachedSpace = true; break; } }
@@ -46,6 +55,16 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
   const spaceState = await p.evaluate(() => ({ stage: window.SpaceSchool.G.stageName, switches: window.SpaceSchool.G.switches }));
   console.log('SPACE', JSON.stringify(spaceState));
   await p.evaluate(() => { window.SpaceSchool.actions.setThrust(false); });
+
+  // BRAKE THRUSTER: the retro brake bleeds off speed so you can slow to dock
+  await p.evaluate(() => window.SpaceSchool.testBrakeSetup(46));
+  const vBrake0 = await p.evaluate(() => window.SpaceSchool.testDockSpeed());
+  await p.evaluate(() => window.SpaceSchool.actions.setBrake(true));
+  for (let i = 0; i < 16; i++) { await sleep(p, 150); if ((await p.evaluate(() => window.SpaceSchool.testDockSpeed())) < 22) break; }
+  await p.evaluate(() => window.SpaceSchool.actions.setBrake(false));
+  const vBrake1 = await p.evaluate(() => window.SpaceSchool.testDockSpeed());
+  const brakeWorks = vBrake1 < vBrake0 - 12;
+  console.log('BRAKE speed %s -> %s works=%s', vBrake0.toFixed(0), vBrake1.toFixed(0), brakeWorks);
 
   // CONSTELLATIONS: scooping stars fills a persistent sky picture (per profile)
   const starsBefore = await p.evaluate(() => window.SpaceSchool.testStarState().stars);
@@ -117,7 +136,7 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
 
   console.log('CONSOLE_ERRORS', errors.length); errors.slice(0, 10).forEach(e => console.log('  !', e));
   await b.close();
-  const ok = boot.three && boot.space && boot.app && boot.canvas && boot.profile && buddies === 4 && planets === 4 && st1 === 'launch' && reachedSpace && (starState.stars >= starsBefore + 6) && (storageOK ? starSaved === starState.stars : true) && bounced && docked && undocked && reachedLanding && persist.deliveries >= 1 && (storageOK ? persist.saved >= 1 : true) && persist.tier !== 'bounce' && persist.planet === 'red' && spPatchesOK && errors.length === 0;
+  const ok = boot.three && boot.space && boot.app && boot.canvas && boot.profile && buddies === 4 && planets === 4 && st1 === 'launch' && reachedSpace && attitudeWorks && brakeWorks && (starState.stars >= starsBefore + 6) && (storageOK ? starSaved === starState.stars : true) && bounced && docked && undocked && reachedLanding && persist.deliveries >= 1 && (storageOK ? persist.saved >= 1 : true) && persist.tier !== 'bounce' && persist.planet === 'red' && spPatchesOK && errors.length === 0;
   console.log(ok ? '\nSPACE VERIFY: PASS ✅' : '\nSPACE VERIFY: FAIL ❌');
   process.exit(ok ? 0 : 1);
 })().catch(e => { console.error('HARNESS ERROR', e); process.exit(2); });

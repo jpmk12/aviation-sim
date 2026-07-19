@@ -449,7 +449,7 @@ function boot() {
     launch = { sc: sc, rocket: rocket, stars: stars, ground: ground, pad: pad, tower: tower,
                smokeGroup: smokeGroup, smoke: [], smokeT: 0, birds: birds, clouds: clouds,
                y: 0, vy: 0, prevY: 0, prevVy: 0, sep: false, done: false, landedBack: false,
-               count: -1, enginesLit: false, wingsOut: false, wingsT: 0 };
+               count: -1, enginesLit: false, wingsOut: false, wingsT: 0, att: 0 };
     return sc;
   }
   function enterLaunch() {
@@ -461,7 +461,8 @@ function boot() {
     l.rocket = makeRocket(G.profile ? G.profile.color : '#ff8a3d');
     l.rocket.position.set(0, 6, 0); l.sc.add(l.rocket);
     l.y = 0; l.vy = 0; l.prevY = 0; l.prevVy = 0; l.sep = false; l.done = false; l.landedBack = false;
-    l.count = -1; l.enginesLit = false; l.wingsOut = false; l.wingsT = 0;
+    l.count = -1; l.enginesLit = false; l.wingsOut = false; l.wingsT = 0; l.att = 0;
+    G.pitch = 0;
     while (l.smokeGroup.children.length) l.smokeGroup.remove(l.smokeGroup.children[0]); l.smoke.length = 0;
     // fresh birds + clouds each mission (the flock re-forms, the deck re-puffs)
     l.sc.remove(l.birds); l.birds = makeBirdFlock(); l.sc.add(l.birds);
@@ -491,11 +492,24 @@ function boot() {
     var lit = G.ignited || l.enginesLit;
     var thr = lit ? G.throttle : 0;
     Audio.rumbleTo(thr);
+
+    // --- attitude minigame: a gentle wind wanders the rocket off vertical; the
+    // child holds the tilt control to keep it straight. Bounded + oscillatory,
+    // so it never runs away, and staying aligned climbs faster (never a fail).
+    var eff = 1;
+    if (G.ignited && l.y > 1) {
+      var gust = Math.sin(G.t * 0.55) * 0.6 + Math.sin(G.t * 1.3 + 2.0) * 0.4;   // ~[-1,1]
+      l.att += (gust * SPACE.C.ATT_DRIFT + (G.pitch || 0) * SPACE.C.ATT_RATE) * dt;
+      l.att = clamp(l.att, -SPACE.C.ATT_MAX, SPACE.C.ATT_MAX);
+      eff = SPACE.launchClimbEff(l.att);
+    }
+
     if (G.ignited) {
       // a = throttle*THRUST/m - g - drag(vy). Below the hover throttle the rocket
       // slows, stops, and sinks back to the pad — the thrust-vs-gravity lesson —
-      // and drag caps the climb speed so the ascent is a real journey.
-      var a = SPACE.launchAccel(thr, mass, l.vy);
+      // and drag caps the climb speed so the ascent is a real journey. Attitude
+      // efficiency trims the effective throttle: fly straight, climb sooner.
+      var a = SPACE.launchAccel(thr * eff, mass, l.vy);
       l.vy += a * dt;
       if (l.vy < 0 && l.y <= 0) l.vy = 0;      // sits on the pad
       l.y += l.vy * dt; if (l.y < 0) l.y = 0;
@@ -528,6 +542,7 @@ function boot() {
 
     // visuals
     l.rocket.position.y = 6 + l.y;
+    l.rocket.rotation.z = -l.att;          // lean with attitude (base-pivot)
     var b = l.rocket.userData.boosters;
     if (b.userData.drop) { b.userData.vy -= 30 * dt; b.position.y += b.userData.vy * dt; b.rotation.z += dt * 1.2; b.children.forEach(function (c, i) { c.rotation.x += dt * (1.5 + i); if (c.userData.flame) c.userData.flame.visible = false; }); if (b.position.y < -900) b.visible = false; }
     var flScale = lit ? (0.25 + thr * 1.25) : 0;
@@ -545,12 +560,14 @@ function boot() {
     l.sc.background.setRGB(lerp(0.75, 0.02, k), lerp(0.89, 0.02, k), lerp(1.0, 0.08, k));
     l.stars.visible = k > 0.3; if (l.stars.material) l.stars.material.opacity = k;
 
-    // camera frames the whole rocket at the pad, then follows it up
-    var camDist = 68 + l.y * 0.12;
+    // camera frames the rocket big and close on the pad, then follows it up
+    var camDist = 42 + l.y * 0.085;
     _shake = lerp(_shake, lit ? thr * 2.0 : 0, 0.2);
     var sh = Math.sin(G.t * 55) * _shake;
-    camera.position.set(camDist, 30 + l.y + sh, camDist);
-    camera.lookAt(0, 24 + l.y, 0);
+    camera.position.set(camDist * 0.7, 30 + l.y + sh, camDist);
+    camera.lookAt(0, 30 + l.y, 0);
+    // report attitude to the HUD indicator (keep-it-green gauge)
+    UI.updateAttitude(l.att / SPACE.C.ATT_MAX, Math.abs(l.att) <= SPACE.C.ATT_BAND);
   }
 
   /* ==================================================================
@@ -704,6 +721,8 @@ function boot() {
     var boost = G.switches.warp ? 1.8 : 1;
     if (s.thrusting) { s.vel.addScaledVector(s.fwd, SPACE.C.SPACE_ACCEL * boost * dt); Audio.hiss(1); Audio.rumbleTo(0.4); }
     else Audio.rumbleTo(0.05);
+    // brake / retro thruster: bleed off speed so you can slow down to dock
+    if (s.braking) { s.vel.multiplyScalar(Math.max(0, 1 - SPACE.C.BRAKE_DAMP * dt)); Audio.hiss(1); Audio.rumbleTo(0.3); }
     // gentle arcade drift: ease velocity toward the nose, tiny damping, cap
     // (alignment is suspended briefly after a dock bounce so the push-back
     // actually pushes back — otherwise this lerp cancels the reflected
@@ -747,6 +766,10 @@ function boot() {
       }
     }
     stepSparks(s, dt);
+
+    // DSKY speed readout (Apollo panel): shows current speed; green while the
+    // station leg is on and you're slow enough to dock, amber when too hot.
+    UI.updateDsky(s.vel.length(), G.dockState === 'toStation' && s.vel.length() <= SPACE.C.DOCK_SPEED, G.dockState === 'toStation');
 
     // warp field
     s.warp.visible = G.switches.warp; if (G.switches.warp) { s.warp.position.copy(s.pos); s.warp.rotation.z += dt * 2; }
@@ -1014,6 +1037,8 @@ function boot() {
     },
     setThrottle: function (v) { G.throttle = clamp(v, 0, 1); },
     setThrust: function (on) { if (space) space.thrusting = on; },
+    setBrake: function (on) { if (space) space.braking = on; },
+    setPitch: function (v) { G.pitch = clamp(v, -1, 1); },     // launch attitude tilt
     setNudge: function (v) { G.nudge = clamp(v, -1, 1); },
     toggleSwitch: function (name) {
       G.switches[name] = !G.switches[name]; Audio.unlock(); Audio.click();
@@ -1030,7 +1055,9 @@ function boot() {
   // approach->landing transition fires without flying the full distance.
   App.testWarpToPlanet = function () { if (space && G.planet) { var tp = G.planet.pos; space.pos.set(tp[0] * 0.86, tp[1] * 0.86, tp[2] * 0.86); } };
   App.testLandingState = function () { return landing ? { y: landing.y, vy: landing.vy, done: landing.done } : null; };
-  App.testLaunchState = function () { return launch ? { y: launch.y, vy: launch.vy, sep: launch.sep, ignited: G.ignited, count: launch.count, enginesLit: launch.enginesLit, wingsOut: launch.wingsOut, cloudsPierced: launch.clouds ? launch.clouds.userData.pierced : false, birdsScattered: launch.birds ? launch.birds.userData.scattered : false } : null; };
+  App.testLaunchState = function () { return launch ? { y: launch.y, vy: launch.vy, sep: launch.sep, ignited: G.ignited, count: launch.count, enginesLit: launch.enginesLit, wingsOut: launch.wingsOut, att: launch.att, cloudsPierced: launch.clouds ? launch.clouds.userData.pierced : false, birdsScattered: launch.birds ? launch.birds.userData.scattered : false } : null; };
+  App.testDockSpeed = function () { return space ? space.vel.length() : null; };
+  App.testBrakeSetup = function (v) { if (space) { space.pos.set(0, 0, 0); space.vel.set(v, 0, 0); } }; // park + set speed to test the brake
   App.testWarpToSpace = function () { if (launch) { launch.y = SPACE.C.ALT_SPACE - 15; launch.vy = 120; } }; // skip the climb in tests
   App.testWarpToStation = function () { if (space) { var d = space.dockPos; var back = d.clone().normalize().multiplyScalar(-160); space.pos.copy(d).add(back); space.vel.set(0, 0, 0); } };
   App.testDockState = function () { return space ? { state: G.dockState, dist: space.pos.distanceTo(space.dockPos), speed: space.vel.length() } : null; };
@@ -1163,8 +1190,27 @@ var UI = (function () {
     var lb = el('button', 'launchbtn', hud); lb.dataset.btn = '1'; lb.textContent = '🚀'; screens._launchBtn = lb;
     lb.addEventListener('pointerdown', function (e) { e.stopPropagation(); app.actions.startCountdown(); setVisual(1); lb.classList.add('gone'); });
     el('div', 'hint hint-launch', hud).textContent = '⬆';
+    // attitude indicator (top-centre): keep the 🚀 marker in the green zone by
+    // tilting — a wordless "fly it straight". Green when aligned, amber when off.
+    var att = el('div', 'attind', hud); screens._attind = att;
+    el('div', 'attind-zone', att);
+    dash.attMarker = el('div', 'attind-marker', att);   // a CSS triangle (recolours)
+    // tilt control (bottom-right; the throttle lever is on the left)
+    var tilt = el('div', 'tilt', hud);
+    var tl = el('button', 'tiltbtn', tilt); tl.dataset.btn = '1'; tl.textContent = '◀';
+    var tr = el('button', 'tiltbtn', tilt); tr.dataset.btn = '1'; tr.textContent = '▶';
+    tl.addEventListener('pointerdown', function (e) { e.stopPropagation(); app.actions.setPitch(-1); tl.classList.add('on'); });
+    tr.addEventListener('pointerdown', function (e) { e.stopPropagation(); app.actions.setPitch(1); tr.classList.add('on'); });
+    window.addEventListener('pointerup', function () { app.actions.setPitch(0); tl.classList.remove('on'); tr.classList.remove('on'); });
     // giant countdown number, dead centre
     var cn = el('div', 'countnum', hud); cn.style.display = 'none'; screens._count = cn;
+  }
+  // move the attitude marker (norm in [-1,1]) and colour it by alignment
+  function updateAttitude(norm, ok) {
+    if (!dash.attMarker) return;
+    dash.attMarker.style.left = (50 + clamp(norm, -1, 1) * 44) + '%';
+    dash.attMarker.classList.toggle('ok', !!ok);
+    if (screens._attind) screens._attind.classList.toggle('ok', !!ok);
   }
   function showLaunch() {
     hideAll(); if (!screens.launch) buildLaunchHud(); screens.launch.style.display = 'block';
@@ -1192,24 +1238,64 @@ var UI = (function () {
     dash.stars = el('div', 'starcount', hud); dash.stars.innerHTML = '⭐ 0';
     // corner star-chart: the constellation you're currently filling in
     dash.chart = el('canvas', 'starchart', hud); dash.chart.width = 128; dash.chart.height = 128;
-    // dashboard with switches
-    var panel = el('div', 'dashboard', hud);
-    var defs = [['light', '💡'], ['comms', '📡'], ['warp', '🌀'], ['map', '🗺️'], ['music', '🎵'], ['gear', '⚙️']];
-    dash.bulbs = el('div', 'bulbs', panel);
+    // --- Apollo-style console: metallic panel, round gauges, a DSKY speed
+    // readout (green = slow enough to dock), and metallic toggle switches ---
+    var panel = el('div', 'dashboard apollo', hud);
+    // left cluster: two round gauges (the speed dial is live; the other is trim)
+    var gl = el('div', 'gaugecluster', panel);
+    dash.gaugeSpeed = makeGauge(gl); dash.gaugeTrim = makeGauge(gl);
+    dash.gaugeTrim.needle.style.transform = 'rotate(-28deg)';   // static flavour
+    // centre: the DSKY (numeric speed + dock/fast lamps)
+    var dsky = el('div', 'dsky', panel);
+    el('div', 'dsky-label', dsky).textContent = 'SPEED';        // for the grown-up
+    dash.dskyNum = el('div', 'dsky-num', dsky); dash.dskyNum.textContent = '000';
+    var lamps = el('div', 'dsky-lamps', dsky);
+    dash.lampDock = el('div', 'dsky-lamp dock', lamps);
+    dash.lampFast = el('div', 'dsky-lamp fast', lamps);
+    // right cluster: the collectible bulbs + the toy toggle switches
+    var rc = el('div', 'rightcluster', panel);
+    dash.bulbs = el('div', 'bulbs', rc);
     for (var b = 0; b < 5; b++) { el('span', 'bulb', dash.bulbs); }
-    var sw = el('div', 'switches', panel);
+    var sw = el('div', 'switches', rc);
+    var defs = [['light', '💡'], ['comms', '📡'], ['warp', '🌀'], ['map', '🗺️'], ['music', '🎵'], ['gear', '⚙️']];
     dash.switchEls = {};
     defs.forEach(function (d) { var btn = el('button', 'switch', sw); btn.dataset.btn = '1'; btn.textContent = d[1]; dash.switchEls[d[0]] = btn; btn.addEventListener('pointerdown', function (e) { e.stopPropagation(); var on = app.actions.toggleSwitch(d[0]); btn.classList.toggle('on', on); applyCockpitLight(); }); });
-    // thrust button (right)
+    // thrust button (right) — go faster
     var thrust = el('button', 'thrust', hud); thrust.dataset.btn = '1'; thrust.textContent = '🚀';
     thrust.addEventListener('pointerdown', function (e) { e.stopPropagation(); app.actions.setThrust(true); thrust.classList.add('on'); });
     window.addEventListener('pointerup', function () { app.actions.setThrust(false); thrust.classList.remove('on'); });
+    // brake / retro thruster (left) — slow down to dock
+    var brake = el('button', 'brake', hud); brake.dataset.btn = '1'; brake.textContent = '🛑';
+    brake.addEventListener('pointerdown', function (e) { e.stopPropagation(); app.actions.setBrake(true); brake.classList.add('on'); });
+    window.addEventListener('pointerup', function () { app.actions.setBrake(false); brake.classList.remove('on'); });
     // stick visual
     stickEl = el('div', 'stick', hud); stickEl.style.display = 'none'; el('div', 'stick-knob', stickEl);
     dash.cockpitGlow = el('div', 'cockpit-glow', hud);
     // wordless goal card: 🛰️ at leg one, 🪐 after undocking
     dash.goal = el('div', 'goalbanner', hud); dash.goal.style.display = 'none';
     dash.hud = hud;
+  }
+  // a round Apollo-style gauge with a needle (returns {el, needle})
+  function makeGauge(parent) {
+    var g = el('div', 'gauge', parent);
+    el('div', 'gauge-face', g);
+    var needle = el('div', 'gauge-needle', g);
+    el('div', 'gauge-hub', g);
+    return { el: g, needle: needle };
+  }
+  // drive the DSKY numeric speed + dock/fast lamps + the speed gauge needle
+  function updateDsky(speed, dockOK, legOn) {
+    if (dash.dskyNum) {
+      var n = Math.round(clamp(speed, 0, 999));
+      dash.dskyNum.textContent = (n < 10 ? '00' : n < 100 ? '0' : '') + n;
+      dash.dskyNum.className = 'dsky-num' + (legOn ? (dockOK ? ' ok' : ' hot') : '');
+    }
+    if (dash.lampDock) dash.lampDock.classList.toggle('lit', !!(legOn && dockOK));
+    if (dash.lampFast) dash.lampFast.classList.toggle('lit', !!(legOn && !dockOK));
+    if (dash.gaugeSpeed) {
+      var a = clamp(speed / 60, 0, 1) * 240 - 120;   // -120°..+120° across 0..60
+      dash.gaugeSpeed.needle.style.transform = 'rotate(' + a + 'deg)';
+    }
   }
   function showGoal(glyph) {
     if (!dash.goal) return;
@@ -1288,8 +1374,8 @@ var UI = (function () {
 
   var UIobj = {
     init: init, showProfile: showProfile, showHangar: showHangar, showMap: showMap,
-    showLaunch: showLaunch, setCountdown: setCountdown,
-    showSpace: showSpace, showGoal: showGoal, setStars: setStars, drawChart: drawChart, lightDashBulb: lightDashBulb, updateSpaceHud: updateSpaceHud,
+    showLaunch: showLaunch, setCountdown: setCountdown, updateAttitude: updateAttitude,
+    showSpace: showSpace, showGoal: showGoal, setStars: setStars, drawChart: drawChart, lightDashBulb: lightDashBulb, updateSpaceHud: updateSpaceHud, updateDsky: updateDsky,
     showLanding: showLanding, deliveryBanner: deliveryBanner, showAfterLanding: showAfterLanding,
     patchEarned: patchEarned,
     showStick: showStick, moveStick: moveStick, hideStick: hideStick, checkPortrait: checkPortrait,
