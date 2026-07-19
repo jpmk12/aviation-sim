@@ -251,6 +251,12 @@ Hand it to the five-year-old with no explanation. They should be delivering a cr
 Everything in this document is subordinate to that.
 
 ---
+*(As-built beyond v1 — see `IMPROVEMENT_PLAN.md`: **rescue missions** add a
+second verb — a 🆘 hangar card sends you out empty to a stranded buddy marked by
+a flare; a low, slow pass scoops it; carry it home and land, and it joins a
+persistent colony beside the runway. A **living world** drifts below: hot-air
+balloons that bob and wobble when you honk, and a flock of birds circling.)*
+
 *Restored to the repo after initially living only in the project chat. Follow-up
 work is planned in `IMPROVEMENT_PLAN.md`; the space sibling's contract is
 `SPACE_SCHOOL.md`. Italicized "as-built" notes above mark where the shipped game

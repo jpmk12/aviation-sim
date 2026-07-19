@@ -57,7 +57,10 @@ var CONFIG = {
     gentleVy: -16,         // sink rate gentler than this = touchdown, else bounce
     runwayHalfW: 95, runwayHalfL: 480,  // on-runway = confetti tier
     rolloutDecel: 16       // u/s^2 braking during rollout
-  }
+  },
+  // rescue missions (IMPROVEMENT_PLAN 2.1): fly low & slow over a stranded
+  // buddy to scoop it up, then bring it home. The reverse of a delivery.
+  rescue: { scoopDist: 95, scoopAGL: 70 }
 };
 // Home base pseudo-landmark: after a delivery its gold beacon + the chevron
 // guide the pilot back for landing (never lost, §2.4).
@@ -302,6 +305,48 @@ function buildBeacon(color) {
   return g;
 }
 
+/* ---- sky discoveries: a living world below (IMPROVEMENT_PLAN 2.2) --------- */
+function makeBalloon(color) {
+  var g = new THREE.Group();
+  var env = new THREE.Mesh(new THREE.SphereGeometry(22, 14, 12), makeLambert(color));
+  env.scale.y = 1.28; env.position.y = 30; g.add(env);
+  // a couple of contrast gores
+  var gore = new THREE.Mesh(new THREE.SphereGeometry(22.3, 14, 12, 0, TAU / 5), makeLambert(shade(color, -0.25)));
+  gore.scale.y = 1.28; gore.position.y = 30; g.add(gore);
+  var basket = new THREE.Mesh(new THREE.BoxGeometry(9, 8, 9), makeLambert('#8a5a2b'));
+  basket.position.y = 2; g.add(basket);
+  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (p) {
+    var rope = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 16), makeLambert('#5a4a3a', false));
+    rope.position.set(p[0] * 5.5, 13, p[1] * 5.5); g.add(rope);
+  });
+  return g;
+}
+function makeBird() {
+  var b = new THREE.Group();
+  var body = new THREE.Mesh(new THREE.SphereGeometry(2.4, 6, 5), makeLambert('#454b54', false)); body.scale.z = 1.5; b.add(body);
+  [-1, 1].forEach(function (s) {
+    var w = new THREE.Mesh(new THREE.ConeGeometry(1.7, 6.5, 4), makeLambert('#5a616b', false));
+    w.rotation.z = s * Math.PI / 2; w.position.x = s * 4.2; w.userData.side = s; b.add(w);
+  });
+  return b;
+}
+function buildAmbientBirds() {
+  var g = new THREE.Group();
+  for (var i = 0; i < 6; i++) { var bird = makeBird(); bird.userData.phase = i * 1.1; bird.userData.rad = 1 - (i % 3) * 0.05; g.add(bird); }
+  g.userData = { t: 0, cx: -500, cz: -400, cy: 320, R: 720 };
+  return g;
+}
+function stepAmbientBirds(g, dt) {
+  var u = g.userData; u.t += dt;
+  g.children.forEach(function (b, i) {
+    var a = u.t * 0.28 + i * 0.5, r = u.R * b.userData.rad;
+    b.position.set(u.cx + Math.cos(a) * r, u.cy + Math.sin(u.t * 0.5 + i) * 12, u.cz + Math.sin(a) * r);
+    b.rotation.y = -a + Math.PI / 2;
+    var flap = Math.sin(u.t * 12 + b.userData.phase) * 0.6;
+    b.children.forEach(function (w) { if (w.userData && w.userData.side) w.rotation.x = flap * w.userData.side; });
+  });
+}
+
 /* ============================================================================
  * CREATURES  —  low-poly, procedurally baked (spec §9.1). mass -> flight,
  * scale -> read-at-a-glance weight. Each has a wave arm on a shoulder pivot.
@@ -475,6 +520,17 @@ function boot() {
   // plane + delivered-creatures group
   var plane = null;
   var deliveredGroup = new THREE.Group(); scene.add(deliveredGroup);
+  var rescueGroup = new THREE.Group(); scene.add(rescueGroup);   // stranded buddy + flare
+
+  // a living world below: hot-air balloons that bob (and wobble when you honk),
+  // and a flock of birds circling the sky (IMPROVEMENT_PLAN 2.2)
+  var balloons = [];
+  [['#ff6b6b', 700, -400], ['#4dabf7', -650, 350], ['#ffd43b', 1150, 700]].forEach(function (d) {
+    var gy = terrainHeight(d[1], d[2]), bal = makeBalloon(d[0]);
+    bal.position.set(d[1], gy + 150, d[2]); scene.add(bal);
+    balloons.push({ m: bal, baseY: gy + 150, phase: d[1] * 0.01 });
+  });
+  var ambientBirds = buildAmbientBirds(); scene.add(ambientBirds);
 
   // --- flight sim state (spec §3.1) ---
   var sim = {
@@ -493,6 +549,9 @@ function boot() {
     cargo: null,        // in-flight cargo object
     phase: 'fly',       // 'roll' (takeoff ground run) | 'fly' | 'rollout' (landing)
     rollT: 0,           // seconds spent at/above rotate speed during the roll
+    mode: 'deliver',    // 'deliver' | 'rescue'
+    rescued: false, rescueTarget: null,
+    honkFx: 0,          // decays after a honk -> balloons wobble
     smoke: false, light: false,
     t: 0, prevT: 0,
     running: false
@@ -672,22 +731,35 @@ function boot() {
     var distHome = Math.hypot(sim.pos.x, sim.pos.z);
     var emptyPlane = !G.carrying && !G.cargo;
 
-    // landing flare cushion: an empty plane close to the ground gets its sink
-    // rate gently softened, so a reasonable approach nearly always touches down
-    // soft. The child aims and descends; the cushion does the last few feet.
-    if (emptyPlane && agl < 26 && sim.vel.y < -12) {
+    // rescue scoop: a low, near pass over the stranded buddy picks it up
+    if (G.mode === 'rescue' && !G.rescued && G.rescueTarget) {
+      var rt = G.rescueTarget;
+      var hd = Math.hypot(sim.pos.x - rt.pos[0], sim.pos.z - rt.pos[2]);
+      if (hd < CONFIG.rescue.scoopDist && agl < CONFIG.rescue.scoopAGL) scoopRescue();
+    }
+
+    // Landing only counts when homeward bound (activeLZ === home): after a drop
+    // or a scoop. This stops the outbound empty rescue leg from auto-landing the
+    // instant it clears the runway. A rescued buddy rides home like cargo but
+    // may still land (deliver-at-home), so allow empty OR rescued.
+    var homeward = G.activeLZ === CONFIG.homeBase;
+    var canLand = homeward && (emptyPlane || G.rescued);
+
+    // landing flare cushion: close to the ground the sink rate is gently
+    // softened, so a reasonable approach nearly always touches down soft.
+    if (canLand && agl < 26 && sim.vel.y < -12) {
       sim.vel.y = lerp(sim.vel.y, -9, clamp(4 * dt, 0, 1));
     }
-    // ...and a skimming empty plane settles on by itself: release the stick in
-    // ground effect and it eases down instead of floating forever.
-    if (emptyPlane && agl < 14 && Math.abs(sim.pitchIn) < 0.1 && sim.vel.y > -6) {
+    // ...and a skimming plane settles on by itself: release the stick in ground
+    // effect and it eases down instead of floating forever.
+    if (canLand && agl < 14 && Math.abs(sim.pitchIn) < 0.1 && sim.vel.y > -6) {
       sim.vel.y = Math.max(sim.vel.y - 14 * dt, -6);
     }
 
     // ground contact — three outcomes, none of them a fail state:
     if (sim.pos.y < gh + GROUND_MARGIN) {
       var L = CONFIG.landing;
-      if (emptyPlane && distHome < L.homeRadius && sim.vel.y > L.gentleVy) {
+      if (canLand && distHome < L.homeRadius && sim.vel.y > L.gentleVy) {
         // gentle touchdown at home -> landing rollout (the pilot's loop closes)
         G.phase = 'rollout'; G.rolloutDone = false;
         sim.pos.y = gh + 8;
@@ -695,11 +767,12 @@ function boot() {
         sim.q.setFromAxisAngle(WORLD_Y, Math.atan2(-sim.forward.x, -sim.forward.z));
         sim.forward.set(0, 0, -1).applyQuaternion(sim.q);
         Audio.thump(); dustPuff(sim.pos);
+        if (G.rescued) deliverRescueHome();   // the buddy comes home to stay
         Object.keys(beacons).forEach(function (k) { beacons[k].visible = false; });
         UI.setDropVisible(false);
         return;
       }
-      if (emptyPlane && distHome < L.homeRadius) {
+      if (canLand && distHome < L.homeRadius) {
         // came in too hot at home -> comedy bounce that BLEEDS SPEED, so
         // bounce-bounce-settle always converges to a landing (funny, never
         // frustrating — a hot arrival is two boings and then a touchdown)
@@ -922,7 +995,53 @@ function boot() {
   }
 
   function chooseCreature(def) { G.carrying = def; G.screen = 'dest'; UI.showDest(); }
-  function chooseDest(lm) { G.activeLZ = lm; startFlight(); }
+  function chooseDest(lm) { G.mode = 'deliver'; G.rescued = false; G.rescueTarget = null; G.activeLZ = lm; startFlight(); }
+
+  // Rescue: a stranded buddy is out at a landmark with a flare. Fly out empty,
+  // scoop it on a low-and-slow pass, then bring it home to land.
+  function chooseRescue() {
+    var lm = CONFIG.landmarks[Math.floor(rnd() * CONFIG.landmarks.length)];
+    var def = CONFIG.creatures[Math.floor(rnd() * CONFIG.creatures.length)];
+    G.mode = 'rescue'; G.rescued = false; G.carrying = null;
+    G.activeLZ = lm;
+    while (rescueGroup.children.length) rescueGroup.remove(rescueGroup.children[0]);
+    var gy = terrainHeight(lm.pos[0], lm.pos[2]);
+    var cre = makeCreature(def); cre.scale.setScalar(14 * def.scale);
+    cre.position.set(lm.pos[0], gy, lm.pos[2]);
+    cre.userData.baseY = gy; cre.userData.standT = 1;
+    rescueGroup.add(cre);
+    var flare = new THREE.Mesh(new THREE.SphereGeometry(11, 10, 8),
+      new THREE.MeshBasicMaterial({ color: 0xff4030, transparent: true, opacity: 0.9, fog: false }));
+    flare.position.set(lm.pos[0], gy + 78, lm.pos[2]); rescueGroup.add(flare);
+    G.rescueTarget = { def: def, pos: [lm.pos[0], gy, lm.pos[2]], mesh: cre, flare: flare };
+    startFlight();
+  }
+  var _seed = 12345;
+  function rnd() { _seed = (_seed * 1103515245 + 12345) & 0x7fffffff; return _seed / 0x7fffffff; }
+
+  function scoopRescue() {
+    var rt = G.rescueTarget;
+    G.rescued = true; G.carrying = rt.def;    // now carry the buddy home
+    while (rescueGroup.children.length) rescueGroup.remove(rescueGroup.children[0]);
+    Audio.chime(false); dustPuff(new THREE.Vector3(rt.pos[0], rt.pos[1] + 12, rt.pos[2]));
+    G.activeLZ = CONFIG.homeBase;
+    Object.keys(beacons).forEach(function (k) { beacons[k].visible = (k === 'home'); });
+    UI.deliveryBanner('close');               // 👏 — got you!
+  }
+
+  function deliverRescueHome() {
+    var def = G.carrying; if (!def) return;
+    // fan rescued buddies out into a little colony beside the runway
+    var n = G.save.deliveries.filter(function (d) { return d.lzId === 'home'; }).length;
+    var a = n * 0.9, r = 80 + (n % 4) * 24;
+    var x = Math.cos(a) * r + 120, z = 160 + Math.sin(a) * r, gy = terrainHeight(x, z);
+    var rec = { creatureId: def.id, lzId: 'home', pos: [x, gy, z], rot: a, ts: 0, tier: 'bull' };
+    addDelivered(rec, true); G.save.deliveries.push(rec);
+    if (G.save.collection.indexOf(def.id) < 0) G.save.collection.push(def.id);
+    Persist.save(G.save);
+    confetti(new THREE.Vector3(x, gy + 12, z), def.color);
+    G.carrying = null; G.rescued = false;
+  }
 
   /* ---- input: floating stick (left half) + DROP (right) ------------------ */
   var stick = { id: -1, ox: 0, oy: 0, x: 0, y: 0, active: false };
@@ -987,14 +1106,27 @@ function boot() {
       Audio.engine(0, 0, false);
     }
 
-    // ambient life regardless of screen
+    // ambient life regardless of screen: birds circle, balloons bob (and
+    // wobble briefly after a honk — the world answers back)
     stepPuffs(dt); stepSmoke(dt);
+    stepAmbientBirds(ambientBirds, dt);
+    if (G.honkFx > 0) G.honkFx = Math.max(0, G.honkFx - dt);
+    balloons.forEach(function (b) {
+      b.m.position.y = b.baseY + Math.sin(G.t * 0.8 + b.phase) * 7 + Math.sin(G.t * 9) * G.honkFx * 5;
+      b.m.rotation.z = Math.sin(G.t * 1.1 + b.phase) * 0.05 + Math.sin(G.t * 11) * G.honkFx * 0.09;
+    });
     // beacon pulse (landmarks + the gold home beacon)
     Object.keys(beacons).forEach(function (key) {
       var b = beacons[key]; if (!b.visible) return;
       var pulse = 0.22 + Math.sin(G.t * 3) * 0.12;
       b.userData.mat.opacity = pulse;
     });
+    // stranded buddy: pulsing flare + waving for help until scooped
+    if (G.mode === 'rescue' && !G.rescued && G.rescueTarget) {
+      var fl = G.rescueTarget.flare;
+      if (fl) { fl.scale.setScalar(1 + Math.sin(G.t * 6) * 0.28); fl.material.opacity = 0.55 + Math.sin(G.t * 6) * 0.35; }
+      animateCreature(G.rescueTarget.mesh, G.t, true);
+    }
     // delivered creatures idle + wave on flyby (§6.2)
     deliveredGroup.children.forEach(function (m) {
       if (m.userData.baseY === undefined) m.userData.baseY = m.position.y;
@@ -1042,7 +1174,8 @@ function boot() {
   // expose actions to the UI layer
   App.actions = {
     chooseProfile: chooseProfile, chooseCreature: chooseCreature, chooseDest: chooseDest,
-    drop: dropCargo, honk: function () { Audio.honk(); },
+    chooseRescue: chooseRescue,
+    drop: dropCargo, honk: function () { Audio.honk(); G.honkFx = 1.3; },
     toggleSmoke: function () { G.smoke = !G.smoke; return G.smoke; },
     toggleLight: function () { G.light = !G.light; return G.light; },
     backToHangar: returnToHangar
@@ -1143,6 +1276,12 @@ var UI = (function () {
       for (var i = 0; i < n; i++) { var d = el('span', 'pip', pips); d.style.background = def.color; }
       card.onclick = function () { app.actions.chooseCreature(def); };
     });
+    // a second kind of mission: go rescue a stranded buddy and bring it home
+    var rcard = el('button', 'creaturecard rescuecard', row);
+    rcard.style.width = '150px'; rcard.style.height = '190px';
+    el('div', 'rescueicon', rcard).textContent = '🆘';
+    el('div', 'destname', rcard).textContent = 'Rescue!';
+    rcard.onclick = function () { app.actions.chooseRescue(); };
     return sc;
   }
 

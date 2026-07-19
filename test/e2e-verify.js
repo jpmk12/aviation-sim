@@ -33,8 +33,8 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
   console.log('BOOT', JSON.stringify(boot));
 
   await page.click('.pilotcard'); await sleep(page, 250);
-  const hangar = await page.evaluate(() => document.querySelectorAll('.creaturecard').length);
-  await page.evaluate(() => document.querySelectorAll('.creaturecard')[2].click()); // heavy bear
+  const hangar = await page.evaluate(() => document.querySelectorAll('.creaturecard:not(.rescuecard)').length);
+  await page.evaluate(() => document.querySelectorAll('.creaturecard:not(.rescuecard)')[2].click()); // heavy bear
   await sleep(page, 200);
   const dest = await page.evaluate(() => document.querySelectorAll('.destcard').length);
   await page.evaluate(() => document.querySelectorAll('.destcard')[0].click());

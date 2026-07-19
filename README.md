@@ -35,6 +35,11 @@ Saturday and there's the dragon you airdropped, still waving.
 - Pull up too hard and the plane runs out of speed, gets "sleepy" (a whoop, the
   nose drops, it wakes up on its own), and speeds back up in a dive. That *is*
   the energy lesson — felt, never explained.
+- **Rescue missions:** tap the 🆘 card instead of a buddy to fly out empty, swoop
+  low and slow over a stranded buddy to scoop it up, and bring it home — it
+  moves into a little colony beside the runway that grows over time.
+- A **living world** below: hot-air balloons bob along (honk and they wobble),
+  and birds wheel through the sky.
 
 ## 🚀 Space School
 
