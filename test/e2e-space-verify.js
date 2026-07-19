@@ -47,6 +47,13 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
   console.log('SPACE', JSON.stringify(spaceState));
   await p.evaluate(() => { window.SpaceSchool.actions.setThrust(false); });
 
+  // CONSTELLATIONS: scooping stars fills a persistent sky picture (per profile)
+  const starsBefore = await p.evaluate(() => window.SpaceSchool.testStarState().stars);
+  for (let i = 0; i < 6; i++) { await p.evaluate(() => window.SpaceSchool.testAddStar()); await sleep(p, 60); }
+  const starState = await p.evaluate(() => window.SpaceSchool.testStarState());
+  const starSaved = await p.evaluate(() => { const g = window.SpaceSchool.G; try { return JSON.parse(localStorage.getItem('spaceschool:profile:' + g.profile.id)).stars; } catch (e) { return -1; } });
+  console.log('CONSTELLATION stars %d -> %d saved=%d', starsBefore, starState.stars, starSaved);
+
   // DOCKING leg: arrive too hot -> boing bounce-off; then slow -> dock ->
   // pause -> auto-undock toward the planet (matching speeds is the lesson)
   await p.evaluate(() => { window.SpaceSchool.testWarpToStation(); window.SpaceSchool.testSetVelTowardDock(55); }); // hot
@@ -103,7 +110,7 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
 
   console.log('CONSOLE_ERRORS', errors.length); errors.slice(0, 10).forEach(e => console.log('  !', e));
   await b.close();
-  const ok = boot.three && boot.space && boot.app && boot.canvas && boot.profile && buddies === 4 && planets === 4 && st1 === 'launch' && reachedSpace && bounced && docked && undocked && reachedLanding && persist.deliveries >= 1 && (storageOK ? persist.saved >= 1 : true) && persist.tier !== 'bounce' && persist.planet === 'red' && errors.length === 0;
+  const ok = boot.three && boot.space && boot.app && boot.canvas && boot.profile && buddies === 4 && planets === 4 && st1 === 'launch' && reachedSpace && (starState.stars >= starsBefore + 6) && (storageOK ? starSaved === starState.stars : true) && bounced && docked && undocked && reachedLanding && persist.deliveries >= 1 && (storageOK ? persist.saved >= 1 : true) && persist.tier !== 'bounce' && persist.planet === 'red' && errors.length === 0;
   console.log(ok ? '\nSPACE VERIFY: PASS ✅' : '\nSPACE VERIFY: FAIL ❌');
   process.exit(ok ? 0 : 1);
 })().catch(e => { console.error('HARNESS ERROR', e); process.exit(2); });

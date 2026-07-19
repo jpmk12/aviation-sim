@@ -98,6 +98,10 @@
   .thrust:active, .thrust.on { transform: translateY(5px) scale(.97); box-shadow: 0 4px 0 #1c5bb0, 0 0 0 10px rgba(47,127,230,.3); }
   .starcount { position: absolute; top: calc(2vh + env(safe-area-inset-top)); right: 4vw; color: #ffe066;
     font-size: clamp(20px, 4vh, 34px); font-weight: 800; text-shadow: 0 2px 4px rgba(0,0,0,.6); }
+  /* the star-chart: current constellation filling in, top-left */
+  .starchart { position: absolute; top: calc(2vh + env(safe-area-inset-top)); left: 3vw;
+    width: 92px; height: 92px; border-radius: 16px; background: rgba(10,16,34,.5);
+    border: 2px solid rgba(255,255,255,.25); backdrop-filter: blur(3px); pointer-events: none; }
 
   .stick { position: absolute; width: 140px; height: 140px; border-radius: 50%; z-index: 16;
     border: 4px solid rgba(255,255,255,.5); background: rgba(255,255,255,.1); pointer-events: none; }
@@ -282,6 +286,20 @@ var CONFIG = {
 };
 CONFIG.gameMeta = { id: 'spaceschool', title: 'Space School', icon: '🚀' };
 
+// Constellations — the stars you scoop in space fill these in, one point per
+// star, across sessions (per profile). Each is a closed polyline in chart
+// space [-1,1]; `dir` places it in the sky. Completing one lights it gold up
+// there forever — a night sky the child builds, one star at a time.
+CONFIG.constellations = [
+  { id: 'rocket', icon: '🚀', name: 'The Rocket', dir: [-0.7, 0.6, -1],
+    points: [[0, 1], [0.45, 0.15], [0.6, -0.75], [0, -1], [-0.6, -0.75], [-0.45, 0.15]] },
+  { id: 'star', icon: '⭐', name: 'The Star', dir: [0.85, 0.65, -0.25],
+    points: [[0, 1], [0.95, 0.31], [0.59, -0.81], [-0.59, -0.81], [-0.95, 0.31]] },
+  { id: 'house', icon: '🏠', name: 'The House', dir: [0.25, 0.6, 1],
+    points: [[-0.7, -0.85], [-0.7, 0.15], [0, 1], [0.7, 0.15], [0.7, -0.85]] }
+];
+CONFIG.constTotal = CONFIG.constellations.reduce(function (a, c) { return a + c.points.length; }, 0);
+
 /* ============================================================================
  * small utilities
  * ==========================================================================*/
@@ -303,7 +321,7 @@ var Persist = (function () {
   function key(id) { return 'spaceschool:profile:' + id; }
   function load(id) { var r; try { r = ok ? localStorage.getItem(key(id)) : mem[id]; } catch (e) { r = mem[id]; } if (!r) return null; try { return JSON.parse(r); } catch (e) { return null; } }
   function save(o) { var r = JSON.stringify(o); try { if (ok) localStorage.setItem(key(o.profileId), r); else mem[o.profileId] = r; } catch (e) { mem[o.profileId] = r; } }
-  function blank(p) { return { profileId: p.id, icon: p.icon, color: p.color, tailNumber: tailFromInitials(p.initials || p.name), deliveries: [], missions: 0 }; }
+  function blank(p) { return { profileId: p.id, icon: p.icon, color: p.color, tailNumber: tailFromInitials(p.initials || p.name), deliveries: [], missions: 0, stars: 0 }; }
   return { load: load, save: save, blank: blank, available: ok };
 })();
 
@@ -783,6 +801,7 @@ function boot() {
     var station = makeStation(); sc.add(station);
     space = { sc: sc, planets: planetObjs, rocks: rocks, gems: gems, warp: warpField,
               station: station, dockPos: new THREE.Vector3(), sparks: [],
+              constLayer: null, constGlow: [],
               q: new THREE.Quaternion(), pos: new THREE.Vector3(), vel: new THREE.Vector3(), fwd: new THREE.Vector3(0, 0, -1), thrusting: false };
     return sc;
   }
@@ -812,10 +831,13 @@ function boot() {
     s.station.userData.ring.getWorldPosition(s.dockPos);
     G.dockState = 'toStation'; G.dockT = 0; G.bounceCool = 0;
     G.collected = 0;
+    // the night sky the child has built so far (persisted per profile)
+    buildConstellations(s);
     // reset switches display
     scenes.space = s.sc;
     Audio.rumbleTo(0);
     UI.showSpace();
+    UI.drawChart();
     UI.showGoal('🛰️');   // after showSpace so the HUD (and the card) exists
   }
   function decoratePlanets(s) {
@@ -905,8 +927,10 @@ function boot() {
     var d = s.pos.length(); if (d > SPACE.C.TETHER_R) { s.pos.multiplyScalar(SPACE.C.TETHER_R / d); s.vel.multiplyScalar(0.5); }
     // asteroids: comedy bonk
     for (var i = 0; i < s.rocks.children.length; i++) { var r = s.rocks.children[i]; r.rotation.x += r.userData.spin.x * dt; r.rotation.y += r.userData.spin.y * dt; if (s.pos.distanceTo(r.position) < 55) { Audio.boing(); var push = s.pos.clone().sub(r.position).setLength(60); s.vel.addScaledVector(push, 1); s.vel.multiplyScalar(0.6); } }
-    // gems: collect
-    for (var j = s.gems.children.length - 1; j >= 0; j--) { var gm = s.gems.children[j]; gm.rotation.y += dt * 2; gm.position.y += Math.sin(G.t * 2 + j) * dt * 3; if (s.pos.distanceTo(gm.position) < 60) { s.gems.remove(gm); Audio.star(); G.collected++; UI.setStars(G.collected); UI.lightDashBulb(G.collected); } }
+    // gems: collect -> trip counter + a permanent star toward the constellations
+    for (var j = s.gems.children.length - 1; j >= 0; j--) { var gm = s.gems.children[j]; gm.rotation.y += dt * 2; gm.position.y += Math.sin(G.t * 2 + j) * dt * 3; if (s.pos.distanceTo(gm.position) < 60) { s.gems.remove(gm); G.collected++; UI.setStars(G.collected); UI.lightDashBulb(G.collected); onStarCollected(s); } }
+    // completed constellations gently pulse up in the sky
+    if (s.constGlow.length) { var op = 0.72 + Math.sin(G.t * 2) * 0.28; for (var ci = 0; ci < s.constGlow.length; ci++) s.constGlow[ci].opacity = op; }
     // beacon pulse + planet spin (destination ring stays dim while the station
     // is the goal, then brightens for leg two)
     Object.keys(s.planets).forEach(function (k) { var po = s.planets[k]; po.grp.rotation.y += dt * 0.05; if (po.ring.visible) { var base = G.dockState === 'toStation' ? 0.10 : 0.4; po.ring.userData.mat.opacity = base + Math.sin(G.t * 3) * base * 0.5; po.ring.lookAt(s.pos); } });
@@ -966,6 +990,71 @@ function boot() {
       if (p.life <= 0) { s.sc.remove(p.m); p.m.geometry.dispose(); p.m.material.dispose(); s.sparks.splice(i, 1); }
     }
   }
+
+  /* ---- constellations: the night sky the child builds (persistent) -------- */
+  // Draw every started/completed constellation into the sky from save.stars.
+  function buildConstellations(s) {
+    if (s.constLayer) { s.sc.remove(s.constLayer); }
+    var layer = new THREE.Group(); s.sc.add(layer); s.constLayer = layer; s.constGlow = [];
+    var stars = (G.save && G.save.stars) || 0;
+    var R = 7200, SZ = 640;
+    var offset = 0, current = firstUnfinished(stars);
+    CONFIG.constellations.forEach(function (c, ci) {
+      var L = c.points.length;
+      var lit = clamp(stars - offset, 0, L); offset += L;
+      var completed = lit === L;
+      var isCurrent = ci === current;
+      if (lit === 0 && !isCurrent) return;   // not started and not the goal yet
+
+      var g = new THREE.Group();
+      var dir = new THREE.Vector3(c.dir[0], c.dir[1], c.dir[2]).normalize();
+      g.position.copy(dir.multiplyScalar(R)); g.lookAt(0, 0, 0);
+      // lines first (behind points)
+      for (var k = 0; k < L; k++) {
+        var a = k, b = (k + 1) % L;
+        if (!(a < lit && b < lit)) continue;   // both endpoints lit (wrap only when full)
+        var geo = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(c.points[a][0] * SZ, c.points[a][1] * SZ, 0),
+          new THREE.Vector3(c.points[b][0] * SZ, c.points[b][1] * SZ, 0)]);
+        var lm = new THREE.LineBasicMaterial({ color: new THREE.Color(completed ? '#ffe066' : '#ffffff'), transparent: true, opacity: completed ? 0.9 : 0.7, fog: false });
+        g.add(new THREE.Line(geo, lm));
+        if (completed) s.constGlow.push(lm);
+      }
+      // points
+      c.points.forEach(function (p, j) {
+        var on = j < lit;
+        var col = completed ? '#ffe066' : (on ? '#ffffff' : '#39415c');
+        var m = new THREE.Mesh(new THREE.SphereGeometry(on || completed ? 26 : 15, 8, 6),
+          new THREE.MeshBasicMaterial({ color: new THREE.Color(col), transparent: true, opacity: on || completed ? 1 : 0.4, fog: false }));
+        m.position.set(p[0] * SZ, p[1] * SZ, 0); g.add(m);
+        if (completed) s.constGlow.push(m.material);
+      });
+      layer.add(g);
+    });
+  }
+  function firstUnfinished(stars) {
+    var cum = 0;
+    for (var i = 0; i < CONFIG.constellations.length; i++) {
+      cum += CONFIG.constellations[i].points.length;
+      if (stars < cum) return i;
+    }
+    return -1;   // all done
+  }
+  // one gem collected -> one permanent star; light it, redraw, celebrate a
+  // finished picture. Extra stars past the last constellation just chime.
+  function onStarCollected(s) {
+    var before = (G.save.stars || 0);
+    if (before >= CONFIG.constTotal) { Audio.star(); return; }
+    G.save.stars = before + 1; Persist.save(G.save);
+    // did this star complete a constellation?
+    var cum = 0, done = null;
+    CONFIG.constellations.forEach(function (c) { cum += c.points.length; if (G.save.stars === cum && before < cum) done = c; });
+    buildConstellations(s); UI.drawChart();
+    if (done) { Audio.chime(true); UI.showGoal(done.icon); }
+    else { Audio.star(); }
+  }
+  App.testAddStar = function () { if (space) onStarCollected(space); };
+  App.testStarState = function () { return { stars: (G.save && G.save.stars) || 0, total: CONFIG.constTotal }; };
 
   /* ==================================================================
    * LANDING STAGE  (3/4 external view, retro-burn)
@@ -1263,6 +1352,8 @@ var UI = (function () {
     chevronEl = el('div', 'chevron', hud); chevronEl.textContent = '▲'; chevronEl.style.display = 'none';
     // star counter
     dash.stars = el('div', 'starcount', hud); dash.stars.innerHTML = '⭐ 0';
+    // corner star-chart: the constellation you're currently filling in
+    dash.chart = el('canvas', 'starchart', hud); dash.chart.width = 128; dash.chart.height = 128;
     // dashboard with switches
     var panel = el('div', 'dashboard', hud);
     var defs = [['light', '💡'], ['comms', '📡'], ['warp', '🌀'], ['map', '🗺️'], ['music', '🎵'], ['gear', '⚙️']];
@@ -1290,8 +1381,24 @@ var UI = (function () {
     setTimeout(function () { dash.goal.style.display = 'none'; }, 2000);
   }
   function applyCockpitLight() { if (dash.cockpitGlow) dash.cockpitGlow.style.opacity = app.G.switches.light ? '1' : '0'; }
-  function showSpace() { hideAll(); if (!screens.space) buildSpaceHud(); screens.space.style.display = 'block'; setStars(app.G.collected); }
+  function showSpace() { hideAll(); if (!screens.space) buildSpaceHud(); screens.space.style.display = 'block'; setStars(app.G.collected); drawChart(); }
   function setStars(n) { if (dash.stars) dash.stars.innerHTML = '⭐ ' + n; }
+  // draw the current (or last, if all done) constellation filling in
+  function drawChart() {
+    var cv = dash.chart; if (!cv) return;
+    var ctx = cv.getContext('2d'), W = cv.width, H = cv.height; ctx.clearRect(0, 0, W, H);
+    var list = cfg.constellations, stars = (app.G.save && app.G.save.stars) || 0;
+    var cum = 0, cur = null, lit = 0, allDone = false;
+    for (var i = 0; i < list.length; i++) { var L = list[i].points.length; var l = clamp(stars - cum, 0, L); if (l < L) { cur = list[i]; lit = l; break; } cum += L; }
+    if (!cur) { cur = list[list.length - 1]; lit = cur.points.length; allDone = true; }
+    var sz = Math.min(W, H) - 34, cx = W / 2, cy = H / 2 + 4;
+    function px(p) { return [cx + p[0] * sz / 2, cy - p[1] * sz / 2]; }
+    var n = cur.points.length;
+    ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+    ctx.strokeStyle = allDone ? '#ffe066' : 'rgba(255,255,255,0.85)';
+    for (var k = 0; k < n; k++) { var a = k, b = (k + 1) % n; if (!(a < lit && b < lit)) continue; var pa = px(cur.points[a]), pb = px(cur.points[b]); ctx.beginPath(); ctx.moveTo(pa[0], pa[1]); ctx.lineTo(pb[0], pb[1]); ctx.stroke(); }
+    for (var j = 0; j < n; j++) { var on = j < lit; var pp = px(cur.points[j]); ctx.beginPath(); ctx.arc(pp[0], pp[1], on ? 5 : 3.2, 0, TAU); ctx.fillStyle = allDone ? '#ffe066' : (on ? '#fff' : 'rgba(255,255,255,0.32)'); if (on) { ctx.shadowColor = allDone ? '#ffe066' : '#fff'; ctx.shadowBlur = 8; } ctx.fill(); ctx.shadowBlur = 0; }
+  }
   function lightDashBulb(n) { if (dash.bulbs) { var b = dash.bulbs.children[(n - 1) % dash.bulbs.children.length]; if (b) b.classList.add('lit'); } }
 
   var _v = new THREE.Vector3();
@@ -1344,7 +1451,7 @@ var UI = (function () {
   var UIobj = {
     init: init, showProfile: showProfile, showHangar: showHangar, showMap: showMap,
     showLaunch: showLaunch, setCountdown: setCountdown,
-    showSpace: showSpace, showGoal: showGoal, setStars: setStars, lightDashBulb: lightDashBulb, updateSpaceHud: updateSpaceHud,
+    showSpace: showSpace, showGoal: showGoal, setStars: setStars, drawChart: drawChart, lightDashBulb: lightDashBulb, updateSpaceHud: updateSpaceHud,
     showLanding: showLanding, deliveryBanner: deliveryBanner, showAfterLanding: showAfterLanding,
     showStick: showStick, moveStick: moveStick, hideStick: hideStick, checkPortrait: checkPortrait,
     get portrait() { return portrait; }, set portrait(v) { portrait = v; }

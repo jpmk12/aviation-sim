@@ -60,9 +60,15 @@ Launch and landing bookend each other (thrust vs gravity); space is the drift.
 - **Cockpit toys** (flip = animation + sound, never affect safety): cabin light,
   comms/radio beeps, WARP boost (star-streak + whoosh), landing-gear arm,
   star-map, space-music beat.
-- **Fun in the void:** scoop floating **stars** (each lights a dash bulb), bonk
-  harmlessly off **asteroids** (comedy boing — the craft can't be lost), pass
-  planets already decorated from earlier trips.
+- **Fun in the void:** scoop floating **stars**, bonk harmlessly off
+  **asteroids** (comedy boing — the craft can't be lost), pass planets already
+  decorated from earlier trips.
+- **Constellations (a sky the child builds).** Every star scooped is permanent:
+  it lights the next point of a **constellation** (🚀 Rocket, ⭐ Star, 🏠 House…)
+  drawn in the sky. A corner **star-chart** shows the current picture filling in
+  (dots joined by lines — no reading); finishing one flares it **gold in the
+  sky forever** with a triumphant chime and its icon. Per profile, across
+  sessions — the delivered-creatures retention loop, aimed upward.
 - Approach the destination planet → landing stage.
 
 ### 2.3 Landing (3/4 external view — retro-burn)

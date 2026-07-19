@@ -98,6 +98,10 @@
   .thrust:active, .thrust.on { transform: translateY(5px) scale(.97); box-shadow: 0 4px 0 #1c5bb0, 0 0 0 10px rgba(47,127,230,.3); }
   .starcount { position: absolute; top: calc(2vh + env(safe-area-inset-top)); right: 4vw; color: #ffe066;
     font-size: clamp(20px, 4vh, 34px); font-weight: 800; text-shadow: 0 2px 4px rgba(0,0,0,.6); }
+  /* the star-chart: current constellation filling in, top-left */
+  .starchart { position: absolute; top: calc(2vh + env(safe-area-inset-top)); left: 3vw;
+    width: 92px; height: 92px; border-radius: 16px; background: rgba(10,16,34,.5);
+    border: 2px solid rgba(255,255,255,.25); backdrop-filter: blur(3px); pointer-events: none; }
 
   .stick { position: absolute; width: 140px; height: 140px; border-radius: 50%; z-index: 16;
     border: 4px solid rgba(255,255,255,.5); background: rgba(255,255,255,.1); pointer-events: none; }
