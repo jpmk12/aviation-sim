@@ -510,7 +510,8 @@ function boot() {
     // start near origin, facing the destination
     s.pos.set(0, 0, 0); s.vel.set(0, 0, 0);
     var tp = G.planet.pos;
-    var ang = Math.atan2(tp[0] - s.pos.x, -(tp[2] - s.pos.z));
+    // face the destination: yaw = atan2(-dx, -dz) (see game.js headingQuatTo)
+    var ang = Math.atan2(-(tp[0] - s.pos.x), -(tp[2] - s.pos.z));
     s.q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), ang);
     s.fwd.set(0, 0, -1).applyQuaternion(s.q);
     // beacon only on destination

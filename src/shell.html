@@ -84,6 +84,12 @@
   .stallhint { position: absolute; top: 12vh; left: 50%; transform: translateX(-50%);
     font-size: 60px; transition: opacity .3s; pointer-events: none; z-index: 17; }
 
+  /* takeoff rotation cue: a big bouncing up-arrow over the stick side */
+  .pullhint { position: absolute; left: 18vw; bottom: 30vh; font-size: 12vh;
+    pointer-events: none; z-index: 17; animation: pullbob .7s ease-in-out infinite;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,.3)); }
+  @keyframes pullbob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4vh); } }
+
   .banner { position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
     font-size: 26vh; z-index: 30; pointer-events: none; }
   .banner.show { animation: pop .5s ease-out; }

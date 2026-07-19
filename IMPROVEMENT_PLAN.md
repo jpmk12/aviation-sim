@@ -118,7 +118,7 @@ Effort: **S** ≈ an hour-ish of focused work · **M** ≈ an afternoon · **L**
 
 ### Suggested build order
 
-1. **Session A (rituals):** 1.3 countdown + 1.4 milestones + 1.5 gravity pips + 1.6 spec restore — Space School suddenly feels twice as thorough, all low-risk.
-2. **Session B (the pilot's loop):** 1.1 takeoff + 1.2 landing — Flight School becomes a complete flight, start to finish.
+1. ✅ **Session A (rituals)** — *shipped*: 1.3 countdown + 1.4 milestones + 1.5 gravity pips + 1.6 spec restore.
+2. ✅ **Session B (the pilot's loop)** — *shipped*: 1.1 takeoff (runway roll, pull to rotate, auto-liftoff safety) + 1.2 landing (gold home beacon after delivery, flare cushion, touchdown → rollout → confetti-on-runway tier; hot arrivals bounce). Also fixed a latent heading bug: `headingQuatTo` mirrored x, so initial/respawn headings pointed off-target (the chevron had been covering for it) — both games corrected.
 3. **Session C (variety):** 2.1 rescue + 2.2 discoveries, or 2.4 station + 2.5 constellations — pick per which game the kids are playing more.
 4. Then phase 3 by kid demand.

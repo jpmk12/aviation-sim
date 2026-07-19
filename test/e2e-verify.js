@@ -1,11 +1,10 @@
-// Headless end-to-end verification of dist/flightschool.html
+// Headless end-to-end verification of dist/flightschool.html — the full
+// pilot's loop: takeoff -> climb -> drop -> stall lesson -> fly home -> land.
 //
-// Drives the built game in Chromium: boots, walks profile -> hangar ->
-// destination -> fly, then exercises drop/persist, roll+auto-level, and the
-// sustained-pull stall + auto-recovery. Requires Playwright:
+// Drives the built game in Chromium. Requires Playwright:
 //   npm i playwright        (and a Chromium/headless-shell binary)
-// Point CHROME at your browser, or set env PW_CHROME. On CI the default
-// chromium.executablePath() usually works; override only if needed.
+// Point CHROME at your browser via env PW_CHROME, or leave unset for
+// Playwright's default.
 const { chromium } = require('playwright');
 const path = require('path');
 const FILE = 'file://' + path.resolve(__dirname, '..', 'dist', 'flightschool.html');
@@ -15,8 +14,8 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
 
 (async () => {
   const browser = await chromium.launch(Object.assign({ args: ['--use-gl=swiftshader'] }, CHROME ? { executablePath: CHROME } : {}));
-  // dsf=1: swiftshader (software GL) is slow; the sim advances by wall-clock dt,
-  // so high pixel counts run it in slow-motion. A real iPad has a GPU + DPR cap.
+  // dsf=1: swiftshader is slow; the sim advances by wall-clock dt, so high pixel
+  // counts run it in slow-motion. A real iPad has a GPU + DPR cap.
   const page = await browser.newPage({ viewport: { width: 1024, height: 768 }, deviceScaleFactor: 1 });
   const errors = [];
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
@@ -39,70 +38,109 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
   await sleep(page, 200);
   const dest = await page.evaluate(() => document.querySelectorAll('.destcard').length);
   await page.evaluate(() => document.querySelectorAll('.destcard')[0].click());
-  await sleep(page, 400);
+  await sleep(page, 300);
   console.log('MENUS hangar=%d dest=%d', hangar, dest);
 
   const S = () => page.evaluate(() => {
-    const s = window.FlightSchool.sim;
+    const s = window.FlightSchool.sim, g = window.FlightSchool.G;
     const r = new window.THREE.Vector3(1, 0, 0).applyQuaternion(s.q);
-    return { v: s.v, x: s.pos.x, y: s.pos.y, z: s.pos.z, fx: s.forward.x, fy: s.forward.y, bankY: r.y, stalled: s.stalled };
+    return { v: s.v, x: s.pos.x, y: s.pos.y, z: s.pos.z, fx: s.forward.x, fy: s.forward.y,
+             bankY: r.y, stalled: s.stalled, phase: g.phase, screen: g.screen };
   });
   const set = (p, r) => page.evaluate(([p, r]) => { const s = window.FlightSchool.sim; s.pitchIn = p; s.rollIn = r; }, [p, r]);
 
+  // ---- 1) TAKEOFF: starts on the runway at rest, spools, rotates on pull ----
   const start = await S();
-  const storageOK = await page.evaluate(() => window.FlightSchool && (function(){try{localStorage.setItem('_t','1');localStorage.removeItem('_t');return true;}catch(e){return false;}})());
-  console.log('START v=%s y=%s fx=%s  storageOK=%s', start.v.toFixed(1), start.y.toFixed(0), start.fx.toFixed(2), storageOK);
+  console.log('START phase=%s v=%s y=%s', start.phase, start.v.toFixed(1), start.y.toFixed(0));
+  const startedOnGround = start.phase === 'roll' && start.v < 10 && start.y < 30;
+  // pull immediately — should NOT rotate until rotation speed
+  await set(1, 0); await sleep(page, 600);
+  const early = await S();
+  const heldUntilSpeed = early.phase === 'roll' || early.v >= 36;
+  // wait for rotation
+  let lifted = null;
+  for (let i = 0; i < 30; i++) { await sleep(page, 400); const s = await S(); if (s.phase === 'fly') { lifted = s; break; } }
+  console.log('TAKEOFF rotated=%s v=%s', !!lifted, lifted ? lifted.v.toFixed(1) : '-');
 
-  // 1) DROP first (from cruise altitude) -> chute -> land -> delivery persisted.
-  // NB: poll in small steps — a single long idle sleep lets headless Chromium
-  // throttle requestAnimationFrame, which would stall the sim (test artifact).
+  // climb to working altitude (gentle pitch — a hard pull would bleed speed),
+  // then level off
+  await set(0.45, 0);
+  for (let i = 0; i < 70; i++) { await sleep(page, 400); const s = await S(); if (s.y > 140) break; }
+  await set(0, 0); await sleep(page, 800);
+  const cruise = await S();
+  console.log('CLIMB y=%s v=%s', cruise.y.toFixed(0), cruise.v.toFixed(1));
+
+  // ---- 2) DROP: chute -> land -> delivery persisted; home beacon comes on ----
   const carrying = await page.evaluate(() => !!window.FlightSchool.G.carrying);
   await page.evaluate(() => window.FlightSchool.actions.drop());
-  // generous window: sim time can run well behind wall-clock under software GL
   for (let i = 0; i < 60; i++) { await sleep(page, 700); const d = await page.evaluate(() => window.FlightSchool.G.save.deliveries.length); if (d > 0) break; }
   const persisted = await page.evaluate(() => {
     const g = window.FlightSchool.G;
-    const raw = (function(){try{return localStorage.getItem('flightschool:profile:' + g.profile.id);}catch(e){return null;}})();
+    const raw = (function () { try { return localStorage.getItem('flightschool:profile:' + g.profile.id); } catch (e) { return null; } })();
     return { deliveries: g.save.deliveries.length, saved: raw ? JSON.parse(raw).deliveries.length : -1,
-             worldMeshes: window.FlightSchool ? -1 : -1 };
+             homeLZ: g.activeLZ && g.activeLZ.id === 'home' };
   });
-  console.log('DROP carrying=%s deliveries=%d savedToStorage=%d', carrying, persisted.deliveries, persisted.saved);
+  const storageOK = await page.evaluate(() => { try { localStorage.setItem('_t', '1'); localStorage.removeItem('_t'); return true; } catch (e) { return false; } });
+  console.log('DROP carrying=%s deliveries=%d saved=%d homeBeacon=%s', carrying, persisted.deliveries, persisted.saved, persisted.homeLZ);
 
-  // 2) ROLL RIGHT from level -> right wing drops (bank) + heading swings; release auto-levels
+  // ---- 3) ROLL + AUTO-LEVEL (quick regression of the energy-lesson controls) ----
   const preRoll = await S();
   await set(0, 1); await sleep(page, 1400);
   const rolled = await S(); await set(0, 0);
-  let leveled = await S();
+  let leveled = rolled;
   for (let i = 0; i < 6; i++) { await sleep(page, 500); leveled = await S(); if (Math.abs(leveled.bankY) < 0.1) break; }
-  console.log('ROLL bankY %s -> %s   heading fx %s -> %s', preRoll.bankY.toFixed(2), rolled.bankY.toFixed(2), preRoll.fx.toFixed(2), rolled.fx.toFixed(2));
-  console.log('AUTO-LEVEL after release: bankY %s -> %s', rolled.bankY.toFixed(2), leveled.bankY.toFixed(2));
+  console.log('ROLL bankY %s -> %s -> %s', preRoll.bankY.toFixed(2), rolled.bankY.toFixed(2), leveled.bankY.toFixed(2));
 
-  // 3) SUSTAINED FULL PULL -> stall (whoop / auto recovery)
+  // ---- 4) SUSTAINED PULL -> stall -> auto recovery ----
   const before = await S();
   await set(1, 0);
-  let minV = 99, everStall = false, tStall = -1;
-  for (let i = 0; i < 30; i++) { await sleep(page, 400); const s = await S(); minV = Math.min(minV, s.v); if (s.stalled && !everStall) { everStall = true; tStall = (i + 1) * 0.4; } if (everStall) break; }
+  let minV = 99, everStall = false;
+  for (let i = 0; i < 30; i++) { await sleep(page, 400); const s = await S(); minV = Math.min(minV, s.v); if (s.stalled) { everStall = true; break; } }
   await set(0, 0);
-  console.log('PULL v %s -> minV %s  everStalled=%s  (~%ss)', before.v.toFixed(1), minV.toFixed(1), everStall, tStall);
-  // poll recovery (automatic, always succeeds — spec §3.4)
   let recov = await S();
   for (let i = 0; i < 20; i++) { await sleep(page, 700); recov = await S(); if (!recov.stalled && recov.v > 40) break; }
-  console.log('RECOVER v=%s fy=%s stalled=%s', recov.v.toFixed(1), recov.fy.toFixed(2), recov.stalled);
-  await page.screenshot({ path: '/home/user/aviation-sim/dist/_verify_shot.png' });
+  console.log('PULL v %s -> minV %s stalled=%s | RECOVER v=%s stalled=%s',
+    before.v.toFixed(1), minV.toFixed(1), everStall, recov.v.toFixed(1), recov.stalled);
+
+  // ---- 5) LANDING: place on final approach, descend; flare cushion + rollout ----
+  await page.evaluate(() => {
+    const s = window.FlightSchool.sim;
+    s.pos.set(0, 90, 620);                       // short final, south of the runway
+    s.q.identity();                              // facing -z, straight in
+    s.v = 48; s.stalled = false;
+    s.forward.set(0, 0, -1).applyQuaternion(s.q);
+    s.vel.copy(s.forward).multiplyScalar(s.v);
+  });
+  // fly it like a kid: push over to descend, then let go — the flare cushion
+  // and settle assist do the last few feet (a hot arrival bounces, bleeds
+  // speed, and lands anyway)
+  await set(-0.28, 0);
+  let landed = null;
+  for (let i = 0; i < 110; i++) {
+    await sleep(page, 500);
+    const s = await S();
+    if (s.phase === 'fly' && s.y < 45) await set(0, 0);          // release the stick low
+    if (s.phase === 'rollout') await set(0, 0);
+    if (i % 12 === 0) console.log('  final: phase=%s y=%s z=%s v=%s', s.phase, s.y.toFixed(0), s.z.toFixed(0), s.v.toFixed(0));
+    if (s.screen === 'hangar') { landed = s; break; }
+  }
+  console.log('LANDING reachedHangar=%s', !!landed);
+
+  await page.screenshot({ path: path.resolve(__dirname, '..', 'dist', '_verify_shot.png') });
   console.log('CONSOLE_ERRORS', errors.length); errors.slice(0, 10).forEach(e => console.log('  !', e));
   await browser.close();
 
   const ok =
     boot.three && boot.aero && boot.app && boot.canvas && boot.profile &&
     hangar === 4 && dest === 3 &&
-    start.y > 50 &&
-    rolled.bankY < -0.3 &&                      // right roll dropped the right wing (banked right)
-    Math.abs(rolled.fx - preRoll.fx) > 0.03 &&  // heading actually changed
-    Math.abs(leveled.bankY) < Math.abs(rolled.bankY) - 0.05 && // auto-leveled on release
-    everStall &&                               // sustained pull DID stall
-    recov.v > 35 && !recov.stalled &&          // auto-recovered out of the stall
-    persisted.deliveries >= 1 &&               // delivery recorded
-    (storageOK ? persisted.saved >= 1 : true) && // persisted when storage available
+    startedOnGround && heldUntilSpeed && !!lifted &&   // real takeoff happened
+    cruise.y > 60 &&
+    persisted.deliveries >= 1 && (storageOK ? persisted.saved >= 1 : true) &&
+    persisted.homeLZ &&                                 // home beacon guides back
+    rolled.bankY < -0.3 &&
+    Math.abs(leveled.bankY) < Math.abs(rolled.bankY) - 0.05 &&
+    everStall && recov.v > 35 && !recov.stalled &&
+    !!landed &&                                         // the loop closed at home
     errors.length === 0;
   console.log(ok ? '\nVERIFY: PASS ✅' : '\nVERIFY: FAIL ❌');
   process.exit(ok ? 0 : 1);

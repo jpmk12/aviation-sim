@@ -42,10 +42,26 @@ var CONFIG = {
   ],
 
   invertPitch: false,       // false = push the stick UP to climb (kid-intuitive)
-  homeReturnRadius: 260,    // fly low & slow within this of home -> back to hangar
   bullseye: 30,             // <30u from the beacon = confetti + dance
-  close: 100               // <100u = enthusiastic wave
+  close: 100,              // <100u = enthusiastic wave
+
+  // --- the pilot's loop: takeoff & landing (IMPROVEMENT_PLAN 1.1/1.2) ------
+  takeoff: {
+    accel: 13,             // ground-roll acceleration, u/s^2 (auto-throttle spool)
+    vRotate: 38,           // pull the stick at/above this to lift off
+    vMaxRoll: 55,          // ground speed cap if they never rotate
+    autoAfter: 7           // seconds at rotate speed before a gentle auto-liftoff
+  },
+  landing: {
+    homeRadius: 550,       // touchdowns count as landings inside this (flat home)
+    gentleVy: -16,         // sink rate gentler than this = touchdown, else bounce
+    runwayHalfW: 95, runwayHalfL: 480,  // on-runway = confetti tier
+    rolloutDecel: 16       // u/s^2 braking during rollout
+  }
 };
+// Home base pseudo-landmark: after a delivery its gold beacon + the chevron
+// guide the pilot back for landing (never lost, §2.4).
+CONFIG.homeBase = { id: 'home', label: 'Home', color: '#ffd23f', pos: [0, 0, 0] };
 
 // Dashboard listing metadata (spec §10.1) — the launcher reads title + icon.
 CONFIG.gameMeta = { id: 'flightschool', title: 'Flight School', icon: '✈️' };
@@ -451,6 +467,10 @@ function boot() {
     b.position.set(lm.pos[0], terrainHeight(lm.pos[0], lm.pos[2]), lm.pos[2]);
     b.visible = false; scene.add(b); beacons[lm.id] = b;
   });
+  // gold home beacon over the runway — lit after a delivery to guide the landing
+  var homeBeacon = buildBeacon(CONFIG.homeBase.color);
+  homeBeacon.position.set(0, terrainHeight(0, 0), 0);
+  homeBeacon.visible = false; scene.add(homeBeacon); beacons.home = homeBeacon;
 
   // plane + delivered-creatures group
   var plane = null;
@@ -471,8 +491,8 @@ function boot() {
     carrying: null,     // creature def currently loaded
     activeLZ: null,     // landmark obj we're delivering to
     cargo: null,        // in-flight cargo object
-    flyArmed: false,    // home-return only after leaving home once
-    leftHome: false,
+    phase: 'fly',       // 'roll' (takeoff ground run) | 'fly' | 'rollout' (landing)
+    rollT: 0,           // seconds spent at/above rotate speed during the roll
     smoke: false, light: false,
     t: 0, prevT: 0,
     running: false
@@ -493,7 +513,10 @@ function boot() {
   }
 
   function headingQuatTo(fromPos, target) {
-    var ang = Math.atan2(target[0] - fromPos.x, -(target[2] - fromPos.z)); // atan2(dx, -dz)
+    // yaw a about +Y turns (0,0,-1) into (-sin a, 0, -cos a), so facing (dx,dz)
+    // needs a = atan2(-dx, -dz). (The old atan2(dx,-dz) mirrored x — verified
+    // against THREE directly; the nav chevron had been quietly covering for it.)
+    var ang = Math.atan2(-(target[0] - fromPos.x), -(target[2] - fromPos.z));
     var q = new THREE.Quaternion().setFromAxisAngle(WORLD_Y, ang);
     return q;
   }
@@ -511,20 +534,65 @@ function boot() {
   }
 
   function startFlight() {
-    // begin airborne over the runway — a five-year-old should not take off (§6.3)
-    var lz = G.activeLZ ? G.activeLZ.pos : [0, 0, -1000];
-    sim.pos.set(0, terrainHeight(0, 0) + 190, 260);
-    sim.q.copy(headingQuatTo(sim.pos, lz));
-    sim.v = AERO.C.V_CRUISE; sim.stalled = false;
+    // Every flight begins ON the runway (the pilot's loop). The auto-throttle
+    // spools, the engine note rises, and the child pulls the stick to rotate.
+    sim.pos.set(0, terrainHeight(0, 0) + 8, 400);
+    sim.q.identity();                       // facing -z, straight down the runway
+    sim.v = 0; sim.stalled = false;
     sim.m = AERO.C.M_PLANE + (G.carrying ? G.carrying.mass : 0);
-    sim.forward.set(0, 0, -1).applyQuaternion(sim.q);
-    sim.vel.copy(sim.forward).multiplyScalar(sim.v);
-    G.leftHome = false; G.flyArmed = false; G.cargo = null;
+    sim.forward.set(0, 0, -1);
+    sim.vel.set(0, 0, 0);
+    G.cargo = null; G.phase = 'roll'; G.rollT = 0;
     // beacon on for the active LZ only
     Object.keys(beacons).forEach(function (k) { beacons[k].visible = false; });
     if (G.activeLZ) beacons[G.activeLZ.id].visible = true;
     G.screen = 'fly'; G.running = true;
     UI.showFly();
+    UI.setDropVisible(false);               // no dropping until airborne
+  }
+
+  /* ---- takeoff ground roll (IMPROVEMENT_PLAN 1.1) ------------------------ */
+  function stepRoll(dt) {
+    var T = CONFIG.takeoff;
+    // auto-throttle spool: heavier cargo accelerates a touch slower (§3.7 echo)
+    sim.v = Math.min(sim.v + (T.accel / sim.m) * dt, T.vMaxRoll);
+    sim.forward.set(0, 0, -1).applyQuaternion(sim.q);
+    sim.vel.copy(sim.forward).multiplyScalar(sim.v);
+    sim.pos.addScaledVector(sim.vel, dt);
+    sim.pos.y = terrainHeight(sim.pos.x, sim.pos.z) + 8;   // wheels on the ground
+
+    var pitchCmd = (CONFIG.invertPitch ? -1 : 1) * sim.pitchIn;
+    var canRotate = sim.v >= T.vRotate;
+    UI.showPullHint(canRotate);
+    if (canRotate) G.rollT += dt;
+    // rotate on a real pull — or gently by itself so nobody is ever stuck
+    if ((canRotate && pitchCmd > 0.25) || G.rollT > T.autoAfter) {
+      G.phase = 'fly';
+      UI.showPullHint(false);
+      UI.setDropVisible(!!G.carrying);
+      _dqx.setFromAxisAngle(AX, 14 * DEG);                 // nose up ~14°
+      sim.q.multiply(_dqx);
+      sim.forward.set(0, 0, -1).applyQuaternion(sim.q);
+      sim.vel.copy(sim.forward).multiplyScalar(sim.v);
+      sim.pos.y += 2;                                      // unstick the wheels
+    }
+  }
+
+  /* ---- landing rollout (IMPROVEMENT_PLAN 1.2) ---------------------------- */
+  function stepRollout(dt) {
+    sim.v = Math.max(0, sim.v - CONFIG.landing.rolloutDecel * dt);
+    sim.forward.set(0, 0, -1).applyQuaternion(sim.q);
+    sim.vel.copy(sim.forward).multiplyScalar(sim.v);
+    sim.pos.addScaledVector(sim.vel, dt);
+    sim.pos.y = terrainHeight(sim.pos.x, sim.pos.z) + 8;
+    if (sim.v < 6 && !G.rolloutDone) {
+      G.rolloutDone = true;
+      var L = CONFIG.landing;
+      var onRunway = Math.abs(sim.pos.x) < L.runwayHalfW && Math.abs(sim.pos.z) < L.runwayHalfL;
+      Audio.chime(onRunway);
+      UI.deliveryBanner(onRunway ? 'bull' : 'close');
+      setTimeout(returnToHangar, 1700);
+    }
   }
 
   /* ---- physics step (spec §3) -------------------------------------------- */
@@ -599,22 +667,58 @@ function boot() {
     sim.vel.lerp(_f, 0.12);
     sim.pos.addScaledVector(sim.vel, dt);
 
-    // ground contact -> comedy respawn (§2.1)
     var gh = terrainHeight(sim.pos.x, sim.pos.z);
-    if (sim.pos.y < gh + GROUND_MARGIN) respawn();
-
-    // home-return arming + trigger (§6.3)
-    var distHome = Math.hypot(sim.pos.x, sim.pos.z);
-    if (distHome > 600) G.leftHome = true;
     var agl = sim.pos.y - gh;
-    if (G.leftHome && distHome < CONFIG.homeReturnRadius && agl < 90 && !G.cargo) {
-      returnToHangar();
+    var distHome = Math.hypot(sim.pos.x, sim.pos.z);
+    var emptyPlane = !G.carrying && !G.cargo;
+
+    // landing flare cushion: an empty plane close to the ground gets its sink
+    // rate gently softened, so a reasonable approach nearly always touches down
+    // soft. The child aims and descends; the cushion does the last few feet.
+    if (emptyPlane && agl < 26 && sim.vel.y < -12) {
+      sim.vel.y = lerp(sim.vel.y, -9, clamp(4 * dt, 0, 1));
+    }
+    // ...and a skimming empty plane settles on by itself: release the stick in
+    // ground effect and it eases down instead of floating forever.
+    if (emptyPlane && agl < 14 && Math.abs(sim.pitchIn) < 0.1 && sim.vel.y > -6) {
+      sim.vel.y = Math.max(sim.vel.y - 14 * dt, -6);
+    }
+
+    // ground contact — three outcomes, none of them a fail state:
+    if (sim.pos.y < gh + GROUND_MARGIN) {
+      var L = CONFIG.landing;
+      if (emptyPlane && distHome < L.homeRadius && sim.vel.y > L.gentleVy) {
+        // gentle touchdown at home -> landing rollout (the pilot's loop closes)
+        G.phase = 'rollout'; G.rolloutDone = false;
+        sim.pos.y = gh + 8;
+        // settle to wheels: keep the heading, drop the pitch/bank
+        sim.q.setFromAxisAngle(WORLD_Y, Math.atan2(-sim.forward.x, -sim.forward.z));
+        sim.forward.set(0, 0, -1).applyQuaternion(sim.q);
+        Audio.thump(); dustPuff(sim.pos);
+        Object.keys(beacons).forEach(function (k) { beacons[k].visible = false; });
+        UI.setDropVisible(false);
+        return;
+      }
+      if (emptyPlane && distHome < L.homeRadius) {
+        // came in too hot at home -> comedy bounce that BLEEDS SPEED, so
+        // bounce-bounce-settle always converges to a landing (funny, never
+        // frustrating — a hot arrival is two boings and then a touchdown)
+        Audio.boing(); dustPuff(sim.pos);
+        sim.pos.y = gh + GROUND_MARGIN + 2;
+        sim.vel.y = 20;
+        sim.v = Math.max(sim.v * 0.6, 28);
+        sim.vel.x *= 0.7; sim.vel.z *= 0.7;
+        return;
+      }
+      respawn();   // §2.1 everywhere else (and always with cargo aboard)
     }
   }
 
   /* ---- cargo drop / delivery (spec §6) ----------------------------------- */
   function dropCargo() {
-    if (G.screen !== 'fly' || !G.carrying || G.cargo) return;
+    if (G.screen !== 'fly' || G.phase !== 'fly' || !G.carrying || G.cargo) return;
+    // must be properly airborne — no dumping the buddy on the runway
+    if (sim.pos.y - terrainHeight(sim.pos.x, sim.pos.z) < 30) return;
     var def = G.carrying;
     var mesh = makeCreature(def);
     mesh.scale.setScalar(14 * def.scale / 1.0);
@@ -690,8 +794,10 @@ function boot() {
     Persist.save(G.save);
 
     G.cargo = null;
-    G.activeLZ = null;
-    Object.keys(beacons).forEach(function (k) { beacons[k].visible = false; });
+    // delivery done -> the gold home beacon lights and the chevron points home:
+    // now fly back and land (the pilot's loop, IMPROVEMENT_PLAN 1.2)
+    G.activeLZ = CONFIG.homeBase;
+    Object.keys(beacons).forEach(function (k) { beacons[k].visible = (k === 'home'); });
     UI.deliveryBanner(tier);
   }
 
@@ -860,28 +966,32 @@ function boot() {
     G.t += dt;
 
     if (G.running && G.screen === 'fly' && !UI.portrait) {
-      stepFlight(dt);
+      if (G.phase === 'roll') stepRoll(dt);
+      else if (G.phase === 'rollout') stepRollout(dt);
+      else stepFlight(dt);
       stepCargo(dt);
       G.save.flightSeconds += dt;
-      // engine note (§7) — the single strongest energy-lesson channel
-      var thrust01 = AERO.thrust(sim.v) / AERO.C.THRUST_MAX;
+      // engine note (§7) — the single strongest energy-lesson channel.
+      // Full song during the takeoff roll (spool), quiet idle on rollout.
+      var thrust01 = G.phase === 'roll' ? 1 : G.phase === 'rollout' ? 0.1
+                   : AERO.thrust(sim.v) / AERO.C.THRUST_MAX;
       Audio.engine(sim.v, thrust01, true);
       // plane follows sim
       plane.position.copy(sim.pos); plane.quaternion.copy(sim.q);
       plane.userData.prop.rotation.z += dt * (18 + sim.v * 0.4);
       plane.userData.light.intensity = G.light ? 2.2 : 0;
       updateCamera(dt);
-      UI.updateChevron(camera, G.activeLZ, sim.pos);
-      UI.updateStallHint(sim.v < AERO.C.V_STALL * 1.1);
+      UI.updateChevron(camera, G.phase === 'fly' ? G.activeLZ : null, sim.pos);
+      UI.updateStallHint(G.phase === 'fly' && sim.v < AERO.C.V_STALL * 1.1);
     } else {
       Audio.engine(0, 0, false);
     }
 
     // ambient life regardless of screen
     stepPuffs(dt); stepSmoke(dt);
-    // beacon pulse
-    CONFIG.landmarks.forEach(function (lm) {
-      var b = beacons[lm.id]; if (!b.visible) return;
+    // beacon pulse (landmarks + the gold home beacon)
+    Object.keys(beacons).forEach(function (key) {
+      var b = beacons[key]; if (!b.visible) return;
       var pulse = 0.22 + Math.sin(G.t * 3) * 0.12;
       b.userData.mat.opacity = pulse;
     });
@@ -1087,6 +1197,9 @@ var UI = (function () {
     // stall hint (visual — the plane got sleepy)
     var sh = el('div', 'stallhint', hud); sh.textContent = '💤'; sh.style.opacity = '0'; screens._stall = sh;
 
+    // pull-up hint — bounces once the takeoff roll reaches rotation speed
+    var ph = el('div', 'pullhint', hud); ph.textContent = '⬆️'; ph.style.display = 'none'; screens._pull = ph;
+
     // delivery banner
     banner = el('div', 'banner', hud); banner.style.display = 'none';
   }
@@ -1100,6 +1213,8 @@ var UI = (function () {
 
   function showFly() { hideAll(); screens.fly.style.display = 'block'; setDropReady(true); }
   function setDropReady(on) { if (dropEl) dropEl.classList.toggle('ready', !!on); }
+  function setDropVisible(on) { if (dropEl) dropEl.style.display = on ? '' : 'none'; }
+  function showPullHint(on) { if (screens._pull) screens._pull.style.display = on ? 'block' : 'none'; }
 
   function showStick(x, y) { stickEl.style.display = 'block'; moveStick(x, y); stickEl.style.left = (x - 70) + 'px'; stickEl.style.top = (y - 70) + 'px'; }
   function moveStick(x, y) { var k = stickEl.firstChild; if (k) { k.style.left = (x - stickEl.offsetLeft - 35) + 'px'; k.style.top = (y - stickEl.offsetTop - 35) + 'px'; } }
@@ -1165,7 +1280,8 @@ var UI = (function () {
   var UIobj = {
     init: init, showProfile: showProfile, showHangar: showHangar, showDest: showDest,
     showFly: showFly, showStick: showStick, moveStick: moveStick, hideStick: hideStick,
-    setDropReady: setDropReady, updateChevron: updateChevron, updateStallHint: updateStallHint,
+    setDropReady: setDropReady, setDropVisible: setDropVisible, showPullHint: showPullHint,
+    updateChevron: updateChevron, updateStallHint: updateStallHint,
     deliveryBanner: deliveryBanner, checkPortrait: checkPortrait, fadeThen: fadeThen,
     get portrait() { return portrait; }, set portrait(v) { portrait = v; }
   };

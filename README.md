@@ -102,8 +102,10 @@ game falls back to in-memory state so it still runs).
 ## How to play (hand it to the kid, say nothing)
 
 **Flight School:** tap a pilot → pick a buddy (bigger = heavier) → pick where to
-go → left thumb steers, big red **DROP** airdrops the buddy over the target → fly
-low over the runway to come home for another trip.
+go → the plane **rolls down the runway** (pull the stick up when the arrow
+bounces — that's your takeoff!) → left thumb steers, big red **DROP** airdrops
+the buddy over the target → follow the **gold beacon** home and set it down
+gently. Land on the runway for confetti; any grass will do too.
 
 **Space School:** tap a pilot → pick a buddy → pick a planet → press 🚀 for the
 **countdown** (5-4-3-2-1!) → fly the climb with the **throttle** → in space,

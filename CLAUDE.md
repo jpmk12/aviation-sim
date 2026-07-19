@@ -144,6 +144,14 @@ Delivered creatures should be visible from the air at range (billboard/impostor 
 ### 6.3 Landing (v1)
 Not required. Fly low over the home field → auto-return-to-hangar with a gentle fade. A five-year-old cannot land an aircraft and should not be asked to.
 Forgiving landings are v2: any touchdown on green counts, bounces are funny.
+*(As-built: the v2 forgiving landing shipped, replacing the auto-return — see
+IMPROVEMENT_PLAN 1.1/1.2. Flights now begin with a takeoff roll (auto-throttle
+spools, pull to rotate, gentle auto-liftoff so nobody is ever stuck) and end
+with a landing at home: after the delivery a gold home beacon + the chevron
+guide back, a flare cushion softens the last few feet for an empty plane,
+gentle touchdown → rollout → confetti on the runway / cheer on the grass →
+hangar. Too-hot arrivals near home comedy-bounce and keep flying; §2.1's boing
+respawn still applies everywhere else and whenever cargo is aboard.)*
 ---
 ## 7. AUDIO
 Web Audio synthesis only. Zero files. ~60 lines total. **This is 40% of the magic — do not defer it to "polish."**
