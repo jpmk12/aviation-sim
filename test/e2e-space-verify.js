@@ -104,6 +104,18 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
   for (let i = 0; i < 20; i++) { await p.evaluate(() => window.SpaceSchool.testWarpToPlanet()); await sleep(p, 400); const s = await p.evaluate(() => window.SpaceSchool.G.stageName); if (s === 'landing') { reachedLanding = true; break; } }
   console.log('SPACE -> reachedLanding=%s', reachedLanding);
 
+  // LANDING controls: an altitude gauge exists, and steering moves the lander
+  // toward the (offset) pad so a kid can find the touchdown spot.
+  const altGauge = await p.evaluate(() => !!document.querySelector('.altgauge'));
+  const stA = await p.evaluate(() => window.SpaceSchool.testLandingState());
+  const steerDir = stA.padX >= stA.x ? 1 : -1;             // steer toward the pad
+  await p.evaluate((d) => window.SpaceSchool.actions.setNudge(d), steerDir);
+  for (let i = 0; i < 8; i++) { await sleep(p, 150); }
+  const stB = await p.evaluate(() => window.SpaceSchool.testLandingState());
+  await p.evaluate(() => window.SpaceSchool.actions.setNudge(0));
+  const steerWorks = altGauge && Math.abs(stB.x - stA.padX) < Math.abs(stA.x - stA.padX) - 3;
+  console.log('LANDER altGauge=%s x %s -> %s (pad %s) steer=%s', altGauge, stA.x.toFixed(0), stB.x.toFixed(0), stA.padX.toFixed(0), steerWorks);
+
   // LANDING: fly a real retro-burn descent — burn harder when falling faster
   // than we want, flare near the ground — and confirm it lands (softly).
   await sleep(p, 400);
@@ -136,7 +148,7 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
 
   console.log('CONSOLE_ERRORS', errors.length); errors.slice(0, 10).forEach(e => console.log('  !', e));
   await b.close();
-  const ok = boot.three && boot.space && boot.app && boot.canvas && boot.profile && buddies === 4 && planets === 4 && st1 === 'launch' && reachedSpace && attitudeWorks && brakeWorks && (starState.stars >= starsBefore + 6) && (storageOK ? starSaved === starState.stars : true) && bounced && docked && undocked && reachedLanding && persist.deliveries >= 1 && (storageOK ? persist.saved >= 1 : true) && persist.tier !== 'bounce' && persist.planet === 'red' && spPatchesOK && errors.length === 0;
+  const ok = boot.three && boot.space && boot.app && boot.canvas && boot.profile && buddies === 4 && planets === 4 && st1 === 'launch' && reachedSpace && attitudeWorks && brakeWorks && steerWorks && (starState.stars >= starsBefore + 6) && (storageOK ? starSaved === starState.stars : true) && bounced && docked && undocked && reachedLanding && persist.deliveries >= 1 && (storageOK ? persist.saved >= 1 : true) && persist.tier !== 'bounce' && persist.planet === 'red' && spPatchesOK && errors.length === 0;
   console.log(ok ? '\nSPACE VERIFY: PASS ✅' : '\nSPACE VERIFY: FAIL ❌');
   process.exit(ok ? 0 : 1);
 })().catch(e => { console.error('HARNESS ERROR', e); process.exit(2); });

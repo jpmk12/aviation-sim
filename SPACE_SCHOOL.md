@@ -39,12 +39,12 @@ Launch and landing bookend each other (thrust vs gravity); space is the drift.
 - Rumble, fire, screen-shake all scale with throttle.
 
 *(As-built beyond v1: the launch camera pulls in **close** so the SLS fills the
-frame, and an **attitude minigame** adds a second input — a gentle wind leans
-the rocket off vertical, and left/right **tilt buttons** + a top-centre "keep the
-🚀 in the green zone" indicator let the child fly it straight. Staying aligned
-trims the effective throttle up so it climbs to space sooner; a sloppy attitude
-just dawdles and never fails — see `SPACE.launchClimbEff` and `src/space.js`
-ATT\_\* constants.)*
+frame, and a gentle **attitude minigame** adds a second input — a light wind
+leans the rocket slightly off vertical, and left/right **tilt buttons** (a fine
+trim, small corrections only) + a top-centre "keep the 🚀 in the green zone"
+indicator let the child fly it straight. Staying aligned trims the effective
+throttle up so it climbs to space sooner; a sloppy attitude just dawdles and
+never fails — see `SPACE.launchClimbEff` and `src/space.js` ATT\_\* constants.)*
 
 ### 2.2 Space (first-person cockpit — the centrepiece)
 - **Dashboard cockpit**: the 3D scene is the window; a panel of chunky **switches
@@ -82,9 +82,12 @@ ATT\_\* constants.)*
 *(As-built beyond v1: the cockpit is restyled to evoke the **Apollo command
 module** — a metallic grey console with round gauges, a green **DSKY numeric
 speed readout** (amber when too fast to dock, green when slow enough, mirroring
-the ring light) and DOCK/FAST lamps, and metallic toggle switches. Docking gains
-a red 🛑 **brake / retro thruster** opposite the blue 🚀 thrust, so slowing to
-match speeds is a deliberate act — `SPACE.C.BRAKE_DAMP` in `src/space.js`.)*
+the ring light) and DOCK/FAST lamps, and metallic toggle switches. The control
+scheme is now **RCS translation**, not nose-steering: the ship holds a fixed
+heading facing the current goal, a **left pad slides it up/down/left/right**, and
+a **right fore/aft pair** (blue 🚀 in, red 🛑 retro to slow) closes or opens the
+range. A centred **alignment reticle** locks green when the station is lined up.
+`SPACE.C.RCS_ACCEL` / `SPACE_ACCEL` in `src/space.js`.)*
 
 ### 2.3 Landing (3/4 external view — retro-burn)
 - 3/4 view of the craft descending toward a **landing pad**; the child
@@ -95,6 +98,14 @@ match speeds is a deliberate act — `SPACE.C.BRAKE_DAMP` in `src/space.js`.)*
   spirit as Flight School's delivery tiers.
 - Touchdown: hatch opens, the **buddy hops out and waves**, plants itself on the
   planet **forever** (per profile). Confetti.
+
+*(As-built beyond v1: the lander gets **clear, legible controls** — a vertical
+**altitude gauge** (left) whose fill height is your height and whose colour is
+your fall speed (green safe → amber → red "burn!"), big **◀ ▶ steer buttons**
+(bottom) to walk left/right, and the **🔥 retro lever** (right) for descent. The
+touchdown **pad is offset** to one side each time and a top **steer-to-pad strip**
+glows green when you're lined up over it — so "find the spot, then set down soft"
+is a real, wordless task. Soft **and** on the pad = confetti.)*
 
 ## 3. THE LOOP & RETENTION
 Pick pilot → pick a **buddy** + a **planet** → launch → fly → land → the buddy

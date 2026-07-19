@@ -603,13 +603,9 @@ function boot() {
     G.stageName = 'space'; G.running = true;
     award('launch');                          // reached space (3.3)
     var s = space;
-    // start near origin, facing the destination
+    // start near origin
     s.pos.set(0, 0, 0); s.vel.set(0, 0, 0);
     var tp = G.planet.pos;
-    // face the destination: yaw = atan2(-dx, -dz) (see game.js headingQuatTo)
-    var ang = Math.atan2(-(tp[0] - s.pos.x), -(tp[2] - s.pos.z));
-    s.q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), ang);
-    s.fwd.set(0, 0, -1).applyQuaternion(s.q);
     // beacon only on destination (dim during the station leg — the station is
     // the first goal; the planet ring brightens after undocking)
     Object.keys(s.planets).forEach(function (k) { s.planets[k].ring.visible = (k === G.planet.id); });
@@ -623,6 +619,7 @@ function boot() {
     s.station.lookAt(s.pos.x, s.pos.y, s.pos.z);      // +z (the port) faces us
     s.station.updateMatrixWorld(true);
     s.station.userData.ring.getWorldPosition(s.dockPos);
+    faceTarget(s, s.dockPos);              // face leg one's goal: the station
     G.dockState = 'toStation'; G.dockT = 0; G.bounceCool = 0;
     G.collected = 0;
     // the night sky the child has built so far (persisted per profile)
@@ -684,6 +681,9 @@ function boot() {
     }
   }
   var _dqp = new THREE.Quaternion(), _dqy = new THREE.Quaternion(), AXx = new THREE.Vector3(1, 0, 0), AXy = new THREE.Vector3(0, 1, 0);
+  var _right = new THREE.Vector3(), _up = new THREE.Vector3(), _lookM = new THREE.Matrix4(), WORLD_UP = new THREE.Vector3(0, 1, 0);
+  // point the ship at a world target (fixed per leg) — you translate, not rotate
+  function faceTarget(s, t) { _lookM.lookAt(s.pos, t, WORLD_UP); s.q.setFromRotationMatrix(_lookM); s.fwd.set(0, 0, -1).applyQuaternion(s.q); }
   function updateSpace(dt) {
     var s = space; if (!s) return;
 
@@ -705,6 +705,7 @@ function boot() {
         Audio.undockHiss();
         var out = s.dockPos.clone().sub(s.station.position).normalize();
         s.vel.copy(out.multiplyScalar(30));
+        faceTarget(s, new THREE.Vector3(G.planet.pos[0], G.planet.pos[1], G.planet.pos[2])); // now face the planet
         UI.showGoal('🪐');
       }
       stepSparks(s, dt);
@@ -712,23 +713,22 @@ function boot() {
       camera.position.copy(s.pos); camera.quaternion.copy(s.q);
       return;
     }
-    // steering: stick x = yaw, y = pitch
-    var yaw = -G.stickX * 1.1 * dt, pitch = -G.stickY * 1.0 * dt;
-    _dqy.setFromAxisAngle(AXy, yaw); s.q.premultiply(_dqy);
-    _dqp.setFromAxisAngle(AXx, pitch); s.q.multiply(_dqp);
-    s.fwd.set(0, 0, -1).applyQuaternion(s.q);
-    // thrust (+ warp boost)
+    // --- RCS translation controls -----------------------------------------
+    // The ship holds a fixed orientation facing the current goal (set on each
+    // leg). You SLIDE it with the left pad (up/down/left/right) and push in/out
+    // with the right fore/aft control — real docking, no rotation to fight.
     var boost = G.switches.warp ? 1.8 : 1;
-    if (s.thrusting) { s.vel.addScaledVector(s.fwd, SPACE.C.SPACE_ACCEL * boost * dt); Audio.hiss(1); Audio.rumbleTo(0.4); }
-    else Audio.rumbleTo(0.05);
-    // brake / retro thruster: bleed off speed so you can slow down to dock
-    if (s.braking) { s.vel.multiplyScalar(Math.max(0, 1 - SPACE.C.BRAKE_DAMP * dt)); Audio.hiss(1); Audio.rumbleTo(0.3); }
-    // gentle arcade drift: ease velocity toward the nose, tiny damping, cap
-    // (alignment is suspended briefly after a dock bounce so the push-back
-    // actually pushes back — otherwise this lerp cancels the reflected
-    // velocity down to zero and the boing barely moves the ship)
-    var sp = s.vel.length();
-    if (sp > 0.01 && !(G.bounceCool > 0)) { var want = s.fwd.clone().multiplyScalar(sp); s.vel.lerp(want, clamp(SPACE.C.SPACE_ALIGN * dt, 0, 1)); }
+    s.fwd.set(0, 0, -1).applyQuaternion(s.q);
+    _right.set(1, 0, 0).applyQuaternion(s.q);
+    _up.set(0, 1, 0).applyQuaternion(s.q);
+    var acc = SPACE.C.SPACE_ACCEL * boost, rcs = SPACE.C.RCS_ACCEL * boost, firing = false;
+    if (s.thrusting) { s.vel.addScaledVector(s.fwd, acc * dt); firing = true; }        // fore
+    if (s.braking)   { s.vel.addScaledVector(s.fwd, -acc * dt); firing = true; }       // aft (retro)
+    if (G.transX)    { s.vel.addScaledVector(_right, G.transX * rcs * dt); firing = true; }
+    if (G.transY)    { s.vel.addScaledVector(_up, G.transY * rcs * dt); firing = true; }
+    if (firing) { Audio.hiss(1); Audio.rumbleTo(0.35); } else Audio.rumbleTo(0.05);
+    // Newton coasts (tiny damping only, so cutting thrust keeps you drifting —
+    // the lesson); use aft to actually slow down.
     s.vel.multiplyScalar(1 - SPACE.C.SPACE_DAMP * dt);
     if (s.vel.length() > SPACE.C.SPACE_VMAX * boost) s.vel.setLength(SPACE.C.SPACE_VMAX * boost);
     s.pos.addScaledVector(s.vel, dt);
@@ -881,7 +881,7 @@ function boot() {
     var ground = new THREE.Mesh(new THREE.CircleGeometry(1400, 40), mat('#c2523a')); ground.rotation.x = -Math.PI / 2; sc.add(ground);
     var pad = new THREE.Mesh(new THREE.CylinderGeometry(26, 30, 3, 20), mat('#8a8f98', false)); pad.position.y = 1.5; sc.add(pad);
     var lander = makeLander('#ff8a3d'); sc.add(lander);
-    landing = { sc: sc, ground: ground, pad: pad, lander: lander, stars: stars, y: 0, vy: 0, x: 0, vx: 0, done: false, delivered: null, puffs: [] };
+    landing = { sc: sc, ground: ground, pad: pad, lander: lander, stars: stars, y: 0, vy: 0, x: 0, vx: 0, padX: 0, done: false, delivered: null, puffs: [] };
     return sc;
   }
   function enterLanding() {
@@ -890,7 +890,10 @@ function boot() {
     var l = landing;
     l.sc.background = new THREE.Color(G.planet.sky);
     l.ground.material.color = new THREE.Color(G.planet.ground);
-    l.y = SPACE.C.ALT_LAND_START; l.vy = SPACE.C.VY_LAND_START; l.x = (Math.sin(G.t) * 30); l.vx = 0; l.done = false; l.delivered = null;
+    // the touchdown pad sits off to one side — steer left/right to find it
+    l.padX = (Math.random() * 2 - 1) * 120;
+    l.pad.position.x = l.padX;
+    l.y = SPACE.C.ALT_LAND_START; l.vy = SPACE.C.VY_LAND_START; l.x = 0; l.vx = 0; l.done = false; l.delivered = null;
     if (l.hopper) { l.sc.remove(l.hopper); l.hopper = null; }
     l.lander.visible = true; l.lander.position.set(l.x, l.y, 0); l.lander.rotation.set(0, 0, 0);
     G.throttle = 0;
@@ -909,6 +912,9 @@ function boot() {
       l.vx += (G.nudge * 14) * dt; l.vx *= (1 - 1.2 * dt); l.x += l.vx * dt;
       // flame
       var fl = 0.2 + thr * 1.2; l.lander.userData.flame.scale.set(1, fl, 1); l.lander.userData.flame.visible = thr > 0.02;
+      // gauges: altitude + descent rate, and the steer-to-pad alignment strip
+      UI.updateLander(clamp(l.y / SPACE.C.ALT_LAND_START, 0, 1), l.vy,
+                      clamp((l.x - l.padX) / 200, -1, 1), Math.abs(l.x - l.padX) < 30);
       if (l.y <= 0) { l.y = 0; touchdown(l); }
     }
     l.lander.position.set(l.x, Math.max(l.y, 0), 0);
@@ -936,8 +942,8 @@ function boot() {
     dust(l, tier === 'bounce' ? 16 : 8);
     Audio.thump();
     if (tier === 'bounce') { Audio.boing(); l.lander.position.y = 6; l.bounce = 1; } // little squash-bounce, still lands
-    var offPad = Math.abs(l.x) < 30;
-    var big = tier === 'soft' && offPad;
+    var onPad = Math.abs(l.x - l.padX) < 30;      // touched down on the pad?
+    var big = tier === 'soft' && onPad;           // soft AND on the pad = confetti
     Audio.chime(big);
     if (big) confetti(l);
     // buddy hops out and waves
@@ -976,13 +982,12 @@ function boot() {
    * input
    * ================================================================== */
   var stickId = -1, stickOX = 0, stickOY = 0;
-  G.stickX = 0; G.stickY = 0; G.nudge = 0;
+  G.stickX = 0; G.stickY = 0; G.nudge = 0; G.transX = 0; G.transY = 0;
   function onDown(e) {
     Audio.unlock();
     if (e.target && e.target.dataset && e.target.dataset.btn) return;
-    if (G.stageName === 'space' && e.clientX < window.innerWidth * 0.5 && stickId < 0) {
-      stickId = e.pointerId; stickOX = e.clientX; stickOY = e.clientY; UI.showStick(e.clientX, e.clientY);
-    }
+    // (space steering is now the on-screen RCS pad + fore/aft buttons — no
+    // free-floating nose stick)
     e.preventDefault();
   }
   function onMove(e) {
@@ -1036,8 +1041,9 @@ function boot() {
       UI.setCountdown(5); Audio.countBeep(false);
     },
     setThrottle: function (v) { G.throttle = clamp(v, 0, 1); },
-    setThrust: function (on) { if (space) space.thrusting = on; },
-    setBrake: function (on) { if (space) space.braking = on; },
+    setThrust: function (on) { if (space) space.thrusting = on; },       // fore
+    setBrake: function (on) { if (space) space.braking = on; },          // aft (retro)
+    setTranslate: function (x, y) { G.transX = clamp(x, -1, 1); G.transY = clamp(y, -1, 1); }, // RCS up/down/left/right
     setPitch: function (v) { G.pitch = clamp(v, -1, 1); },     // launch attitude tilt
     setNudge: function (v) { G.nudge = clamp(v, -1, 1); },
     toggleSwitch: function (name) {
@@ -1054,10 +1060,10 @@ function boot() {
   // headless-test hook: jump the ship near the current destination so the
   // approach->landing transition fires without flying the full distance.
   App.testWarpToPlanet = function () { if (space && G.planet) { var tp = G.planet.pos; space.pos.set(tp[0] * 0.86, tp[1] * 0.86, tp[2] * 0.86); } };
-  App.testLandingState = function () { return landing ? { y: landing.y, vy: landing.vy, done: landing.done } : null; };
+  App.testLandingState = function () { return landing ? { y: landing.y, vy: landing.vy, x: landing.x, padX: landing.padX, done: landing.done } : null; };
   App.testLaunchState = function () { return launch ? { y: launch.y, vy: launch.vy, sep: launch.sep, ignited: G.ignited, count: launch.count, enginesLit: launch.enginesLit, wingsOut: launch.wingsOut, att: launch.att, cloudsPierced: launch.clouds ? launch.clouds.userData.pierced : false, birdsScattered: launch.birds ? launch.birds.userData.scattered : false } : null; };
   App.testDockSpeed = function () { return space ? space.vel.length() : null; };
-  App.testBrakeSetup = function (v) { if (space) { space.pos.set(0, 0, 0); space.vel.set(v, 0, 0); } }; // park + set speed to test the brake
+  App.testBrakeSetup = function (v) { if (space) { space.pos.set(0, 0, 0); space.fwd.set(0, 0, -1).applyQuaternion(space.q); space.vel.copy(space.fwd).multiplyScalar(v); } }; // approach speed along the facing — aft thrust slows it
   App.testWarpToSpace = function () { if (launch) { launch.y = SPACE.C.ALT_SPACE - 15; launch.vy = 120; } }; // skip the climb in tests
   App.testWarpToStation = function () { if (space) { var d = space.dockPos; var back = d.clone().normalize().multiplyScalar(-160); space.pos.copy(d).add(back); space.vel.set(0, 0, 0); } };
   App.testDockState = function () { return space ? { state: G.dockState, dist: space.pos.distanceTo(space.dockPos), speed: space.vel.length() } : null; };
@@ -1260,15 +1266,31 @@ var UI = (function () {
     var defs = [['light', '💡'], ['comms', '📡'], ['warp', '🌀'], ['map', '🗺️'], ['music', '🎵'], ['gear', '⚙️']];
     dash.switchEls = {};
     defs.forEach(function (d) { var btn = el('button', 'switch', sw); btn.dataset.btn = '1'; btn.textContent = d[1]; dash.switchEls[d[0]] = btn; btn.addEventListener('pointerdown', function (e) { e.stopPropagation(); var on = app.actions.toggleSwitch(d[0]); btn.classList.toggle('on', on); applyCockpitLight(); }); });
-    // thrust button (right) — go faster
-    var thrust = el('button', 'thrust', hud); thrust.dataset.btn = '1'; thrust.textContent = '🚀';
-    thrust.addEventListener('pointerdown', function (e) { e.stopPropagation(); app.actions.setThrust(true); thrust.classList.add('on'); });
-    window.addEventListener('pointerup', function () { app.actions.setThrust(false); thrust.classList.remove('on'); });
-    // brake / retro thruster (left) — slow down to dock
-    var brake = el('button', 'brake', hud); brake.dataset.btn = '1'; brake.textContent = '🛑';
-    brake.addEventListener('pointerdown', function (e) { e.stopPropagation(); app.actions.setBrake(true); brake.classList.add('on'); });
-    window.addEventListener('pointerup', function () { app.actions.setBrake(false); brake.classList.remove('on'); });
-    // stick visual
+    // alignment reticle (centre): line the goal ring up in the crosshair by
+    // sliding — it locks green when you're centred on the dock
+    dash.reticle = el('div', 'reticle', hud); dash.reticle.style.display = 'none';
+    el('div', 'reticle-ring', dash.reticle);
+    el('div', 'reticle-cross h', dash.reticle); el('div', 'reticle-cross v', dash.reticle);
+    dash.reticleTgt = el('div', 'reticle-tgt', hud); dash.reticleTgt.style.display = 'none';
+    // --- RCS translation pad (left): slide up / down / left / right ---
+    var pad = el('div', 'rcs', hud);
+    var tx = 0, ty = 0;
+    function send() { app.actions.setTranslate(tx, ty); }
+    [['up', 0, 1, '▲'], ['down', 0, -1, '▼'], ['left', -1, 0, '◀'], ['right', 1, 0, '▶']].forEach(function (d) {
+      var btn = el('button', 'rcsbtn ' + d[0], pad); btn.dataset.btn = '1'; btn.textContent = d[3];
+      btn.addEventListener('pointerdown', function (e) { e.stopPropagation(); tx = d[1] || tx; ty = d[2] || ty; if (d[1]) tx = d[1]; if (d[2]) ty = d[2]; btn.classList.add('on'); send(); });
+      var release = function () { if (d[1]) tx = 0; if (d[2]) ty = 0; btn.classList.remove('on'); send(); };
+      btn.addEventListener('pointerup', release); btn.addEventListener('pointerleave', release); btn.addEventListener('pointercancel', release);
+    });
+    window.addEventListener('pointerup', function () { tx = 0; ty = 0; app.actions.setTranslate(0, 0); Array.prototype.forEach.call(pad.querySelectorAll('.rcsbtn'), function (b) { b.classList.remove('on'); }); });
+    // --- fore / aft control (right): push in toward the goal, or retro to slow ---
+    var fa = el('div', 'foreaft', hud);
+    var fore = el('button', 'fabtn fore', fa); fore.dataset.btn = '1'; fore.textContent = '🚀';
+    var aft = el('button', 'fabtn aft', fa); aft.dataset.btn = '1'; aft.textContent = '🛑';
+    fore.addEventListener('pointerdown', function (e) { e.stopPropagation(); app.actions.setThrust(true); fore.classList.add('on'); });
+    aft.addEventListener('pointerdown', function (e) { e.stopPropagation(); app.actions.setBrake(true); aft.classList.add('on'); });
+    window.addEventListener('pointerup', function () { app.actions.setThrust(false); app.actions.setBrake(false); fore.classList.remove('on'); aft.classList.remove('on'); });
+    // stick visual (retained for other stages; hidden here)
     stickEl = el('div', 'stick', hud); stickEl.style.display = 'none'; el('div', 'stick-knob', stickEl);
     dash.cockpitGlow = el('div', 'cockpit-glow', hud);
     // wordless goal card: 🛰️ at leg one, 🪐 after undocking
@@ -1330,10 +1352,26 @@ var UI = (function () {
     if (!chevronEl) return;
     _v.set(planet.pos[0], planet.pos[1], planet.pos[2]);
     var p = _v.clone().project(camera);
+    var w = window.innerWidth, h = window.innerHeight, m = 70;
     var onScreen = p.z < 1 && Math.abs(p.x) < 0.92 && Math.abs(p.y) < 0.92;
-    if (onScreen) { chevronEl.style.display = 'none'; return; }
+    if (onScreen) {
+      // alignment reticle: a fixed centre crosshair + a marker on the goal.
+      // Slide (RCS) to bring the marker into the crosshair — it locks green.
+      chevronEl.style.display = 'none';
+      var sx = (p.x * 0.5 + 0.5) * w, sy = (-p.y * 0.5 + 0.5) * h;
+      var locked = Math.hypot(p.x, p.y) < 0.09;
+      if (dash.reticle) { dash.reticle.style.display = 'block'; dash.reticle.classList.toggle('locked', locked); }
+      if (dash.reticleTgt) {
+        dash.reticleTgt.style.display = 'block';
+        dash.reticleTgt.style.left = (sx - 26) + 'px'; dash.reticleTgt.style.top = (sy - 26) + 'px';
+        dash.reticleTgt.style.borderColor = locked ? '#7fd858' : planet.color;
+      }
+      return;
+    }
+    if (dash.reticle) dash.reticle.style.display = 'none';
+    if (dash.reticleTgt) dash.reticleTgt.style.display = 'none';
     var dx = p.x, dy = p.y; if (p.z > 1) { dx = -dx; dy = -dy; }
-    var ang = Math.atan2(dy, dx), w = window.innerWidth, h = window.innerHeight, m = 70;
+    var ang = Math.atan2(dy, dx);
     var cx = w / 2 + Math.cos(ang) * (w / 2 - m), cy = h / 2 - Math.sin(ang) * (h / 2 - m);
     chevronEl.style.display = 'flex'; chevronEl.style.left = (cx - 34) + 'px'; chevronEl.style.top = (cy - 34) + 'px';
     chevronEl.style.color = planet.color; chevronEl.style.transform = 'rotate(' + (90 - ang / Math.PI * 180) + 'deg)';
@@ -1342,22 +1380,41 @@ var UI = (function () {
   /* ---- landing HUD ---- */
   function buildLandingHud() {
     var hud = el('div', 'hud', root); screens.landing = hud; hud.style.display = 'none';
+    // retro throttle lever (right): drag up to burn harder and slow the fall
     var wrap = el('div', 'throttle retro', hud); wrap.dataset.btn = '1';
     var fill = el('div', 'throttle-fill', wrap); var knob = el('div', 'throttle-knob', wrap);
+    el('div', 'throttle-cap', wrap).textContent = '🔥';
     var dragging = false;
     function setFromY(y) { var r = wrap.getBoundingClientRect(); var v = clamp(1 - (y - r.top) / r.height, 0, 1); app.actions.setThrottle(v); fill.style.height = (v * 100) + '%'; knob.style.bottom = 'calc(' + (v * 100) + '% - 22px)'; }
     wrap.addEventListener('pointerdown', function (e) { e.stopPropagation(); dragging = true; setFromY(e.clientY); });
     window.addEventListener('pointermove', function (e) { if (dragging) setFromY(e.clientY); });
     window.addEventListener('pointerup', function () { dragging = false; });
-    // left/right nudge
-    var lr = el('div', 'nudge', hud);
-    var lb = el('button', 'nudgebtn', lr); lb.dataset.btn = '1'; lb.textContent = '◀';
-    var rb = el('button', 'nudgebtn', lr); rb.dataset.btn = '1'; rb.textContent = '▶';
-    lb.addEventListener('pointerdown', function (e) { e.stopPropagation(); app.actions.setNudge(-1); });
-    rb.addEventListener('pointerdown', function (e) { e.stopPropagation(); app.actions.setNudge(1); });
-    window.addEventListener('pointerup', function () { app.actions.setNudge(0); });
-    el('div', 'hint hint-retro', hud).textContent = '🔥⬇';
+    // altitude + descent-rate gauge (left): the fill is how high you are; its
+    // colour is your fall speed — green safe, amber quick, red too fast (burn!)
+    var ag = el('div', 'altgauge', hud); dash.altGauge = ag;
+    dash.altFill = el('div', 'altgauge-fill', ag);
+    dash.altMark = el('div', 'altgauge-mark', ag); dash.altMark.textContent = '🛸';
+    el('div', 'altgauge-ground', ag);
+    // steer-to-pad alignment strip (top): centre the 🛸 over the pad zone
+    var lt = el('div', 'landtarget', hud); dash.landTarget = lt;
+    el('div', 'landtarget-zone', lt);
+    dash.landMark = el('div', 'landtarget-mark', lt); dash.landMark.textContent = '🛸';
+    // steer buttons (bottom-centre): move left / right to find the pad
+    var steer = el('div', 'steer', hud);
+    var lb = el('button', 'steerbtn', steer); lb.dataset.btn = '1'; lb.textContent = '◀';
+    var rb = el('button', 'steerbtn', steer); rb.dataset.btn = '1'; rb.textContent = '▶';
+    lb.addEventListener('pointerdown', function (e) { e.stopPropagation(); app.actions.setNudge(-1); lb.classList.add('on'); });
+    rb.addEventListener('pointerdown', function (e) { e.stopPropagation(); app.actions.setNudge(1); rb.classList.add('on'); });
+    window.addEventListener('pointerup', function () { app.actions.setNudge(0); lb.classList.remove('on'); rb.classList.remove('on'); });
     var banner = el('div', 'banner', hud); banner.style.display = 'none'; screens._banner = banner;
+  }
+  // altitude gauge fill + descent-rate colour + steer-to-pad strip
+  function updateLander(altFrac, vy, latNorm, onPad) {
+    if (dash.altFill) dash.altFill.style.height = (altFrac * 100) + '%';
+    if (dash.altMark) dash.altMark.style.bottom = 'calc(' + (altFrac * 100) + '% - 14px)';
+    if (dash.altGauge) { var rate = Math.abs(vy); dash.altGauge.className = 'altgauge ' + (rate <= SPACE.C.SOFT ? 'safe' : rate <= SPACE.C.MED ? 'ok' : 'hot'); }
+    if (dash.landMark) dash.landMark.style.left = (50 + latNorm * 44) + '%';
+    if (dash.landTarget) dash.landTarget.classList.toggle('on', !!onPad);
   }
   function showLanding() { hideAll(); if (!screens.landing) buildLandingHud(); screens.landing.style.display = 'block'; }
   function deliveryBanner(tier) { var b = screens._banner; if (!b) return; b.textContent = tier === 'bull' ? '🎉' : tier === 'close' ? '👏' : '🙂'; b.className = 'banner show'; b.style.display = 'flex'; setTimeout(function () { b.style.display = 'none'; }, 2000); }
@@ -1377,7 +1434,7 @@ var UI = (function () {
     showLaunch: showLaunch, setCountdown: setCountdown, updateAttitude: updateAttitude,
     showSpace: showSpace, showGoal: showGoal, setStars: setStars, drawChart: drawChart, lightDashBulb: lightDashBulb, updateSpaceHud: updateSpaceHud, updateDsky: updateDsky,
     showLanding: showLanding, deliveryBanner: deliveryBanner, showAfterLanding: showAfterLanding,
-    patchEarned: patchEarned,
+    updateLander: updateLander, patchEarned: patchEarned,
     showStick: showStick, moveStick: moveStick, hideStick: hideStick, checkPortrait: checkPortrait,
     get portrait() { return portrait; }, set portrait(v) { portrait = v; }
   };

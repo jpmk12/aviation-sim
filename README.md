@@ -75,17 +75,21 @@ Three stages, one journey: **launch → space → land.**
    never fall). Watch the boosters separate and the sky fade to stars.
 2. **Space** — a first-person **Apollo-style cockpit**: a metal panel with round
    gauges, a green **DSKY speed readout**, and flip-for-fun **switches** (lights,
-   comms, warp, music…). First goal: **dock with the space station** — glide into
-   the ring while it glows green, using the blue 🚀 **thrust** to speed up and the
-   red 🛑 **brake** to slow down (green = slow enough; too fast and you boing right
-   off — the DSKY turns amber to warn you). Clunk, cheer, push-off — then follow
-   the beacon to your planet, scooping **stars** and bonking harmlessly off
+   comms, warp, music…). You fly it like a real spacecraft: the **left pad slides
+   you up/down/left/right**, the **right pair pushes fore/aft** (blue 🚀 in, red 🛑
+   to slow). First goal: **dock with the space station** — line the station up in
+   the **alignment reticle** (it locks green) and ease in while the ring + DSKY
+   glow green (too fast and you boing right off). Clunk, cheer, push-off — then
+   follow the beacon to your planet, scooping **stars** and bonking harmlessly off
    asteroids on the way.
    Every star you scoop lights up a **constellation** in the sky (watch the
    little chart, top-left) — finish one and it glows gold up there forever.
-3. **Land** — retro-burn to slow your fall against the planet's gravity. Feather
-   it down for confetti (any landing is a happy one). Your buddy hops out and
-   lives on that planet forever, visible from orbit on your next trip.
+3. **Land** — a clear cockpit: the **altitude gauge** (left) shows how high you
+   are and turns amber→red if you're falling too fast, the **◀ ▶ steer buttons**
+   walk you left/right to line the 🛸 up over the **pad** (top strip glows green
+   when you're over it), and the **🔥 retro lever** (right) slows your fall.
+   Feather it onto the pad for confetti (any landing is a happy one). Your buddy
+   hops out and lives on that planet forever, visible from orbit on your next trip.
 
 <p>
 <img src="docs/space-docking.png" width="420" alt="Docking approach — the station's ring glows green when you're slow enough to dock">
@@ -146,9 +150,10 @@ the buddy over the target → follow the **gold beacon** home and set it down
 gently. Land on the runway for confetti; any grass will do too.
 
 **Space School:** tap a pilot → pick a buddy → pick a planet → press 🚀 for the
-**countdown** (5-4-3-2-1!) → fly the climb with the **throttle** → in space,
-**steer + thrust** toward the beacon and flip switches for fun → **retro-burn**
-down to land softly. The buddy stays.
+**countdown** (5-4-3-2-1!) → fly the climb with the **throttle**, keeping the
+rocket straight with the **tilt** buttons → in space, **slide** (left pad) and
+push **fore/aft** (right) to line up in the reticle and **dock**, then on to the
+planet → **steer to the pad and retro-burn** down to land softly. The buddy stays.
 
 ---
 

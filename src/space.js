@@ -37,8 +37,9 @@
     // the climb (and below hover it sinks back). Also gentles the fall-back.
     K_DRAG_LAUNCH: 0.0013,
 
-    // --- SPACE (3D, gentle arcade drift) ----------------------------------
-    SPACE_ACCEL: 26,    // forward thrust while the button is held
+    // --- SPACE (3D, RCS translation — the ship faces the goal, you slide it) --
+    SPACE_ACCEL: 26,    // fore/aft thrust while a button is held
+    RCS_ACCEL: 22,      // up/down/left/right translation thrust (the left pad)
     SPACE_VMAX: 150,    // speed cap
     SPACE_DAMP: 0.06,   // per-second velocity damping — TINY, so it coasts;
                         //   just enough that a drifting 5-year-old eventually
@@ -57,14 +58,17 @@
                         //   the retro thruster that lets you slow down to dock
 
     // --- LAUNCH ATTITUDE (keep the rocket climbing straight) ---------------
-    ATT_MAX: 0.4,       // rad — most the rocket can lean either way (~23°)
-    ATT_RATE: 1.0,      // rad/s the tilt control swings it while held
-    ATT_DRIFT: 0.26,    // rad/s wind-gust wander to correct against (bounded,
-                        //   oscillatory — the rocket never runs away on its own)
-    ATT_BAND: 0.16,     // rad — within this of vertical = full climb efficiency
-    ATT_EFF_MIN: 0.55,  // climb efficiency when fully off attitude. NEVER 0: a
+    // Deliberately GENTLE: the wind nudges the rocket only slightly off vertical
+    // and the tilt control is a fine trim, so it needs small corrections, never
+    // big saves. (Retuned after the first pass felt too twitchy.)
+    ATT_MAX: 0.22,      // rad — most the rocket can lean either way (~13°)
+    ATT_RATE: 0.28,     // rad/s the tilt control trims it while held (fine, slow)
+    ATT_DRIFT: 0.075,   // rad/s wind-gust wander to correct against (small,
+                        //   bounded, oscillatory — never runs away on its own)
+    ATT_BAND: 0.11,     // rad — within this of vertical = full climb efficiency
+    ATT_EFF_MIN: 0.6,   // climb efficiency when fully off attitude. NEVER 0: a
                         //   sloppy ascent is slower, not a failure (still climbs
-                        //   at full throttle, since 0.55 clears the hover point)
+                        //   at full throttle, since 0.6 clears the hover point)
 
     // --- LANDING (1D vertical + small lateral) ----------------------------
     THRUST_LAND: 22,    // retro force; hover throttle ~ m*g/THRUST
