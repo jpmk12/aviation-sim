@@ -46,15 +46,19 @@ Three stages, one journey: **launch → space → land.**
 <img src="docs/space-landing.png" width="260" alt="Landing stage">
 </p>
 
-1. **Launch** — shove the throttle up to beat gravity (a timid push just rumbles
-   on the pad), watch the boosters separate and the sky fade to stars.
+1. **Launch** — press 🚀 for the countdown, then shove the throttle up to beat
+   gravity (a timid push just rumbles on the pad), watch the boosters separate
+   and the sky fade to stars.
 2. **Space** — a first-person cockpit full of flip-for-fun **switches and buttons**
-   (lights, comms, warp, music…). Steer, thrust, and *coast* like real space;
-   follow the glowing beacon to your planet, scoop floating stars, bonk
-   harmlessly off asteroids.
+   (lights, comms, warp, music…). First goal: **dock with the space station** —
+   glide into the ring while it glows green (green = slow enough; too fast and
+   you boing right off). Clunk, cheer, push-off — then follow the beacon to your
+   planet, scooping stars and bonking harmlessly off asteroids on the way.
 3. **Land** — retro-burn to slow your fall against the planet's gravity. Feather
    it down for confetti (any landing is a happy one). Your buddy hops out and
    lives on that planet forever, visible from orbit on your next trip.
+
+<img src="docs/space-docking.png" width="640" alt="Docking approach — the station's ring glows green when you're slow enough to dock">
 
 Same pilots and buddies as Flight School — and a heavier buddy makes a heavier
 rocket and a trickier landing, the same load-planning lesson carried across.

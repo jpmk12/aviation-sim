@@ -46,6 +46,33 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
   const spaceState = await p.evaluate(() => ({ stage: window.SpaceSchool.G.stageName, switches: window.SpaceSchool.G.switches }));
   console.log('SPACE', JSON.stringify(spaceState));
   await p.evaluate(() => { window.SpaceSchool.actions.setThrust(false); });
+
+  // DOCKING leg: arrive too hot -> boing bounce-off; then slow -> dock ->
+  // pause -> auto-undock toward the planet (matching speeds is the lesson)
+  await p.evaluate(() => { window.SpaceSchool.testWarpToStation(); window.SpaceSchool.testSetVelTowardDock(55); }); // hot
+  // bounce = we got close, stayed undocked (too fast), and were pushed back out
+  // (drift-align curves the ship back quickly, so look for any retreat at all)
+  let bounced = false, minDist = 1e9, prevDist = 1e9, sawClose = false;
+  for (let i = 0; i < 20; i++) {
+    await sleep(p, 300);
+    const d = await p.evaluate(() => window.SpaceSchool.testDockState());
+    minDist = Math.min(minDist, d.dist);
+    if (d.dist < 55) sawClose = true;
+    if (d.state === 'toStation' && sawClose && d.dist > prevDist + 6) { bounced = true; break; }
+    prevDist = d.dist;
+    if (d.state !== 'toStation') break; // docked at speed — would be a bug
+  }
+  await p.evaluate(() => { window.SpaceSchool.testWarpToStation(); window.SpaceSchool.testSetVelTowardDock(18); }); // gentle
+  let docked = false, undocked = false, shotTaken = false;
+  for (let i = 0; i < 50; i++) {
+    await sleep(p, 400);
+    const d = await p.evaluate(() => window.SpaceSchool.testDockState());
+    if ((d.state === 'docking' || d.state === 'docked') && !shotTaken) { shotTaken = true; await p.screenshot({ path: OUT + '_sp_dock.png' }); }
+    if (d.state === 'docked') docked = true;
+    if (docked && d.state === 'toPlanet') { undocked = true; break; }
+  }
+  console.log('DOCK bounced=%s docked=%s undocked=%s', bounced, docked, undocked);
+
   // warp near planet + fly in
   let reachedLanding = false;
   for (let i = 0; i < 20; i++) { await p.evaluate(() => window.SpaceSchool.testWarpToPlanet()); await sleep(p, 400); const s = await p.evaluate(() => window.SpaceSchool.G.stageName); if (s === 'landing') { reachedLanding = true; break; } }
@@ -76,7 +103,7 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
 
   console.log('CONSOLE_ERRORS', errors.length); errors.slice(0, 10).forEach(e => console.log('  !', e));
   await b.close();
-  const ok = boot.three && boot.space && boot.app && boot.canvas && boot.profile && buddies === 4 && planets === 4 && st1 === 'launch' && reachedSpace && reachedLanding && persist.deliveries >= 1 && (storageOK ? persist.saved >= 1 : true) && persist.tier !== 'bounce' && persist.planet === 'red' && errors.length === 0;
+  const ok = boot.three && boot.space && boot.app && boot.canvas && boot.profile && buddies === 4 && planets === 4 && st1 === 'launch' && reachedSpace && bounced && docked && undocked && reachedLanding && persist.deliveries >= 1 && (storageOK ? persist.saved >= 1 : true) && persist.tier !== 'bounce' && persist.planet === 'red' && errors.length === 0;
   console.log(ok ? '\nSPACE VERIFY: PASS ✅' : '\nSPACE VERIFY: FAIL ❌');
   process.exit(ok ? 0 : 1);
 })().catch(e => { console.error('HARNESS ERROR', e); process.exit(2); });

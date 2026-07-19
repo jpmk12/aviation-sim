@@ -48,6 +48,12 @@
     TETHER_R: 6000,     // soft world radius; beyond it, nudged back (never lost)
     APPROACH_R: 520,    // within this of the destination planet -> land
 
+    // --- DOCKING (the space stage's first goal) ----------------------------
+    STATION_T: 0.38,    // station sits this fraction of the way to the planet
+    DOCK_RADIUS: 46,    // within this of the dock ring = an arrival
+    DOCK_SPEED: 26,     // arrive slower than this = dock; faster = boing bounce
+                        //   (the lesson: docking means MATCHING speeds, gently)
+
     // --- LANDING (1D vertical + small lateral) ----------------------------
     THRUST_LAND: 22,    // retro force; hover throttle ~ m*g/THRUST
     ALT_LAND_START: 170, // a brisk ~8–12s descent, not a tedious crawl

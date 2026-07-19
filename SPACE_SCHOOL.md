@@ -45,8 +45,18 @@ Launch and landing bookend each other (thrust vs gravity); space is the drift.
   forward. **Gentle arcade drift** — velocity lags the nose a little so it feels
   floaty and space-y, but always trends back to controllable. Soft speed cap; a
   soft tether keeps them from getting lost.
-- **Nav (load-bearing):** the destination planet glows with a beacon ring; a
-  cockpit HUD **chevron** points to it whenever it's off-window.
+- **Two legs, one goal at a time.** A wordless goal card opens each leg:
+  1. **🛰️ Dock.** A space station (hub, rotating habitat wheel, solar panels)
+     sits on the route. Its **docking ring is the speed light**: amber = too
+     fast, green = slow enough. Glide in green → clunk, chime, sparkle, a
+     moment docked, then an automatic push-off. Arrive hot → a comedy **boing**
+     bounces you back out to try again slower. *Docking = matching speeds,
+     gently — that's the lesson.* Never a hard gate: blasting past the station
+     straight to the planet still finishes the mission.
+  2. **🪐 The planet.** The destination's beacon ring brightens and the chevron
+     retargets; approach → landing stage.
+- **Nav (load-bearing):** the current goal glows (station ring, then planet
+  ring); a cockpit HUD **chevron** points to it whenever it's off-window.
 - **Cockpit toys** (flip = animation + sound, never affect safety): cabin light,
   comms/radio beeps, WARP boost (star-streak + whoosh), landing-gear arm,
   star-map, space-music beat.

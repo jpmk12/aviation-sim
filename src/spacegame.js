@@ -108,6 +108,8 @@ var Audio = (function () {
       else tone('square', 620, 620, 0.12, 0.16);
     },
     whooshCloud: function () { noise(0.6, 0.3, 900); },
+    clunk: function () { noise(0.12, 0.35, 550); tone('square', 170, 85, 0.2, 0.22); tone('triangle', 950, 720, 0.08, 0.1, 0.03); },
+    undockHiss: function () { noise(0.38, 0.22, 1900); tone('sine', 300, 210, 0.25, 0.08, 0.05); },
     star:  function () { tone('triangle', 880, 1320, 0.18, 0.16); },
     boing: function () { tone('sine', 320, 90, 0.28, 0.28); tone('sine', 260, 140, 0.28, 0.1, 0.02); },
     thump: function () { noise(0.18, 0.4, 480); tone('sine', 110, 55, 0.24, 0.3); },
@@ -150,6 +152,41 @@ function makePlanet(p) {
     var ring = new THREE.Mesh(new THREE.RingGeometry(p.size * 1.35, p.size * 2.1, 48), new THREE.MeshBasicMaterial({ color: new THREE.Color(shade(p.color, 0.3)), side: THREE.DoubleSide, transparent: true, opacity: 0.75, fog: false }));
     ring.rotation.x = Math.PI * 0.42; g.add(ring);
   }
+  return g;
+}
+
+// A friendly space station: central hub, big rotating habitat wheel (facing
+// the approach), solar panels, and a docking port whose glowing ring is both
+// the target and the speed light (green = slow enough to dock, amber = too
+// hot). Built with the dock port along +z; lookAt() aims it at the approach.
+function makeStation() {
+  var g = new THREE.Group();
+  var hull = mat('#e8ecf2'), dark = mat('#4a5568', false), blue = mat('#2b4d8f', false);
+  var hub = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 30, 12), hull);
+  hub.rotation.x = Math.PI / 2; g.add(hub);                    // hub along z
+  var wheel = new THREE.Mesh(new THREE.TorusGeometry(36, 6.5, 10, 28), hull);
+  g.add(wheel);                                                // habitat wheel in xy
+  for (var i = 0; i < 4; i++) {
+    var a = i / 4 * TAU + Math.PI / 4;
+    var spoke = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 34, 6), dark);
+    spoke.rotation.z = a + Math.PI / 2;
+    spoke.position.set(Math.cos(a) * 17, Math.sin(a) * 17, 0);
+    wheel.add(spoke);
+  }
+  // solar wings off the back of the hub
+  [-1, 1].forEach(function (s) {
+    var arm = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 26, 6), dark);
+    arm.rotation.z = Math.PI / 2; arm.position.set(s * 18, 0, -12); g.add(arm);
+    var panel = new THREE.Mesh(new THREE.BoxGeometry(24, 0.8, 12), blue);
+    panel.position.set(s * 32, 0, -12); g.add(panel);
+  });
+  // docking port + the glowing ring (speed light)
+  var port = new THREE.Mesh(new THREE.CylinderGeometry(5, 6.5, 9, 10), dark);
+  port.rotation.x = Math.PI / 2; port.position.z = 19; g.add(port);
+  var ringMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#7fd858'), transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+  var ring = new THREE.Mesh(new THREE.TorusGeometry(15, 2.0, 10, 28), ringMat);
+  ring.position.z = 25; g.add(ring);
+  g.userData = { wheel: wheel, ring: ring, ringMat: ringMat };
   return g;
 }
 
@@ -499,7 +536,9 @@ function boot() {
     var rocks = new THREE.Group(); sc.add(rocks);
     var gems = new THREE.Group(); sc.add(gems);
     var warpField = makeStars(600, 4000); warpField.visible = false; sc.add(warpField);
+    var station = makeStation(); sc.add(station);
     space = { sc: sc, planets: planetObjs, rocks: rocks, gems: gems, warp: warpField,
+              station: station, dockPos: new THREE.Vector3(), sparks: [],
               q: new THREE.Quaternion(), pos: new THREE.Vector3(), vel: new THREE.Vector3(), fwd: new THREE.Vector3(0, 0, -1), thrusting: false };
     return sc;
   }
@@ -514,17 +553,26 @@ function boot() {
     var ang = Math.atan2(-(tp[0] - s.pos.x), -(tp[2] - s.pos.z));
     s.q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), ang);
     s.fwd.set(0, 0, -1).applyQuaternion(s.q);
-    // beacon only on destination
+    // beacon only on destination (dim during the station leg — the station is
+    // the first goal; the planet ring brightens after undocking)
     Object.keys(s.planets).forEach(function (k) { s.planets[k].ring.visible = (k === G.planet.id); });
     // decorate planets with delivered buddies (dots in orbit)
     decoratePlanets(s);
     // strew some asteroids + collectible stars along the route
     buildRoute(s, tp);
+    // the space station sits on the way to the planet, dock facing the arrival
+    var st = SPACE.C.STATION_T;
+    s.station.position.set(tp[0] * st, tp[1] * st + 60, tp[2] * st);
+    s.station.lookAt(s.pos.x, s.pos.y, s.pos.z);      // +z (the port) faces us
+    s.station.updateMatrixWorld(true);
+    s.station.userData.ring.getWorldPosition(s.dockPos);
+    G.dockState = 'toStation'; G.dockT = 0; G.bounceCool = 0;
     G.collected = 0;
     // reset switches display
     scenes.space = s.sc;
     Audio.rumbleTo(0);
     UI.showSpace();
+    UI.showGoal('🛰️');   // after showSpace so the HUD (and the card) exists
   }
   function decoratePlanets(s) {
     var byPlanet = {};
@@ -566,6 +614,31 @@ function boot() {
   var _dqp = new THREE.Quaternion(), _dqy = new THREE.Quaternion(), AXx = new THREE.Vector3(1, 0, 0), AXy = new THREE.Vector3(0, 1, 0);
   function updateSpace(dt) {
     var s = space; if (!s) return;
+
+    // --- docking sequence: controls paused, the game glides you in ---------
+    if (G.dockState === 'docking' || G.dockState === 'docked') {
+      G.dockT += dt;
+      s.station.userData.wheel.rotation.z += dt * 0.12;
+      if (G.dockState === 'docking') {
+        s.vel.set(0, 0, 0);
+        s.pos.lerp(s.dockPos, clamp(2.2 * dt, 0, 1));
+        if (G.dockT >= 1.1) {
+          G.dockState = 'docked'; G.dockT = 0;
+          Audio.clunk(); Audio.chime(true); spawnSparks(s);
+        }
+      } else if (G.dockT >= 2.4) {
+        // auto-undock: a push-off back out of the port, then on to the planet
+        G.dockState = 'toPlanet';
+        Audio.undockHiss();
+        var out = s.dockPos.clone().sub(s.station.position).normalize();
+        s.vel.copy(out.multiplyScalar(30));
+        UI.showGoal('🪐');
+      }
+      stepSparks(s, dt);
+      Audio.rumbleTo(0);
+      camera.position.copy(s.pos); camera.quaternion.copy(s.q);
+      return;
+    }
     // steering: stick x = yaw, y = pitch
     var yaw = -G.stickX * 1.1 * dt, pitch = -G.stickY * 1.0 * dt;
     _dqy.setFromAxisAngle(AXy, yaw); s.q.premultiply(_dqy);
@@ -576,8 +649,11 @@ function boot() {
     if (s.thrusting) { s.vel.addScaledVector(s.fwd, SPACE.C.SPACE_ACCEL * boost * dt); Audio.hiss(1); Audio.rumbleTo(0.4); }
     else Audio.rumbleTo(0.05);
     // gentle arcade drift: ease velocity toward the nose, tiny damping, cap
+    // (alignment is suspended briefly after a dock bounce so the push-back
+    // actually pushes back — otherwise this lerp cancels the reflected
+    // velocity down to zero and the boing barely moves the ship)
     var sp = s.vel.length();
-    if (sp > 0.01) { var want = s.fwd.clone().multiplyScalar(sp); s.vel.lerp(want, clamp(SPACE.C.SPACE_ALIGN * dt, 0, 1)); }
+    if (sp > 0.01 && !(G.bounceCool > 0)) { var want = s.fwd.clone().multiplyScalar(sp); s.vel.lerp(want, clamp(SPACE.C.SPACE_ALIGN * dt, 0, 1)); }
     s.vel.multiplyScalar(1 - SPACE.C.SPACE_DAMP * dt);
     if (s.vel.length() > SPACE.C.SPACE_VMAX * boost) s.vel.setLength(SPACE.C.SPACE_VMAX * boost);
     s.pos.addScaledVector(s.vel, dt);
@@ -587,16 +663,64 @@ function boot() {
     for (var i = 0; i < s.rocks.children.length; i++) { var r = s.rocks.children[i]; r.rotation.x += r.userData.spin.x * dt; r.rotation.y += r.userData.spin.y * dt; if (s.pos.distanceTo(r.position) < 55) { Audio.boing(); var push = s.pos.clone().sub(r.position).setLength(60); s.vel.addScaledVector(push, 1); s.vel.multiplyScalar(0.6); } }
     // gems: collect
     for (var j = s.gems.children.length - 1; j >= 0; j--) { var gm = s.gems.children[j]; gm.rotation.y += dt * 2; gm.position.y += Math.sin(G.t * 2 + j) * dt * 3; if (s.pos.distanceTo(gm.position) < 60) { s.gems.remove(gm); Audio.star(); G.collected++; UI.setStars(G.collected); UI.lightDashBulb(G.collected); } }
-    // beacon pulse + planet spin
-    Object.keys(s.planets).forEach(function (k) { var po = s.planets[k]; po.grp.rotation.y += dt * 0.05; if (po.ring.visible) { po.ring.userData.mat.opacity = 0.4 + Math.sin(G.t * 3) * 0.2; po.ring.lookAt(s.pos); } });
+    // beacon pulse + planet spin (destination ring stays dim while the station
+    // is the goal, then brightens for leg two)
+    Object.keys(s.planets).forEach(function (k) { var po = s.planets[k]; po.grp.rotation.y += dt * 0.05; if (po.ring.visible) { var base = G.dockState === 'toStation' ? 0.10 : 0.4; po.ring.userData.mat.opacity = base + Math.sin(G.t * 3) * base * 0.5; po.ring.lookAt(s.pos); } });
+
+    // --- the station: leg one's goal. Ring = speed light: green means "slow
+    // enough to dock", amber means "too hot". Gentle arrival docks; a hot one
+    // boings you back out to try again slower (matching speeds IS the lesson).
+    s.station.userData.wheel.rotation.z += dt * 0.12;
+    var spd = s.vel.length();
+    var canDock = spd <= SPACE.C.DOCK_SPEED;
+    if (G.dockState === 'toStation') {
+      var rm = s.station.userData.ringMat;
+      rm.color.set(canDock ? '#7fd858' : '#ffb01a');
+      rm.opacity = 0.55 + Math.sin(G.t * (canDock ? 3 : 9)) * 0.3;
+      if (G.bounceCool > 0) G.bounceCool -= dt;
+      var dd = s.pos.distanceTo(s.dockPos);
+      if (dd < SPACE.C.DOCK_RADIUS) {
+        if (canDock) { G.dockState = 'docking'; G.dockT = 0; }
+        else if (G.bounceCool <= 0) {
+          Audio.boing(); G.bounceCool = 1.2;
+          var away = s.pos.clone().sub(s.dockPos).normalize();
+          s.vel.copy(away.multiplyScalar(spd * 0.6 + 26));
+        }
+      }
+    }
+    stepSparks(s, dt);
+
     // warp field
     s.warp.visible = G.switches.warp; if (G.switches.warp) { s.warp.position.copy(s.pos); s.warp.rotation.z += dt * 2; }
     // camera = cockpit (a touch behind the eye-point for a hint of nose)
     camera.position.copy(s.pos); camera.quaternion.copy(s.q);
-    // approach destination -> land
+    // nav chevron: the station first, then the planet (colour matches the goal)
+    var navTarget = G.dockState === 'toStation'
+      ? { pos: [s.dockPos.x, s.dockPos.y, s.dockPos.z], color: canDock ? '#7fd858' : '#ffb01a' }
+      : G.planet;
+    UI.updateSpaceHud(camera, navTarget, s.pos, 0);
+    // approach destination -> land (never gated on docking — a kid who blasts
+    // straight past the station can still finish the mission)
     var dp = s.pos.distanceTo(new THREE.Vector3(G.planet.pos[0], G.planet.pos[1], G.planet.pos[2]));
-    UI.updateSpaceHud(camera, G.planet, s.pos, dp);
     if (dp < G.planet.size + SPACE.C.APPROACH_R) { enterLanding(); return; }
+  }
+
+  function spawnSparks(s) {
+    for (var i = 0; i < 14; i++) {
+      var m = new THREE.Mesh(new THREE.OctahedronGeometry(2.2, 0),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color('hsl(' + (i * 26 % 360) + ',85%,65%)'), fog: false }));
+      m.position.copy(s.dockPos);
+      s.sc.add(m);
+      var a = i / 14 * TAU;
+      s.sparks.push({ m: m, vel: new THREE.Vector3(Math.cos(a) * 24, (i % 5 - 2) * 8, Math.sin(a) * 24), life: 1.1 });
+    }
+  }
+  function stepSparks(s, dt) {
+    for (var i = s.sparks.length - 1; i >= 0; i--) {
+      var p = s.sparks[i];
+      p.m.position.addScaledVector(p.vel, dt); p.m.rotation.x += dt * 6; p.life -= dt;
+      if (p.life <= 0) { s.sc.remove(p.m); p.m.geometry.dispose(); p.m.material.dispose(); s.sparks.splice(i, 1); }
+    }
   }
 
   /* ==================================================================
@@ -770,6 +894,16 @@ function boot() {
   App.testLandingState = function () { return landing ? { y: landing.y, vy: landing.vy, done: landing.done } : null; };
   App.testLaunchState = function () { return launch ? { y: launch.y, vy: launch.vy, sep: launch.sep, ignited: G.ignited, count: launch.count, enginesLit: launch.enginesLit, wingsOut: launch.wingsOut, cloudsPierced: launch.clouds ? launch.clouds.userData.pierced : false, birdsScattered: launch.birds ? launch.birds.userData.scattered : false } : null; };
   App.testWarpToSpace = function () { if (launch) { launch.y = SPACE.C.ALT_SPACE - 15; launch.vy = 120; } }; // skip the climb in tests
+  App.testWarpToStation = function () { if (space) { var d = space.dockPos; var back = d.clone().normalize().multiplyScalar(-160); space.pos.copy(d).add(back); space.vel.set(0, 0, 0); } };
+  App.testDockState = function () { return space ? { state: G.dockState, dist: space.pos.distanceTo(space.dockPos), speed: space.vel.length() } : null; };
+  App.testSetVelTowardDock = function (speed) {
+    if (!space) return;
+    var dir = space.dockPos.clone().sub(space.pos).normalize();
+    space.vel.copy(dir.clone().multiplyScalar(speed));
+    // aim the nose too (drift alignment would otherwise bend the path away)
+    space.q.setFromRotationMatrix(new THREE.Matrix4().lookAt(space.pos, space.dockPos, new THREE.Vector3(0, 1, 0)));
+    space.fwd.set(0, 0, -1).applyQuaternion(space.q);
+  };
 
   UI.init(App, CONFIG);
   resize(); UI.showProfile(); frame();
@@ -900,7 +1034,16 @@ var UI = (function () {
     // stick visual
     stickEl = el('div', 'stick', hud); stickEl.style.display = 'none'; el('div', 'stick-knob', stickEl);
     dash.cockpitGlow = el('div', 'cockpit-glow', hud);
+    // wordless goal card: 🛰️ at leg one, 🪐 after undocking
+    dash.goal = el('div', 'goalbanner', hud); dash.goal.style.display = 'none';
     dash.hud = hud;
+  }
+  function showGoal(glyph) {
+    if (!dash.goal) return;
+    dash.goal.textContent = glyph;
+    dash.goal.style.display = 'flex';
+    dash.goal.classList.remove('show'); void dash.goal.offsetWidth; dash.goal.classList.add('show');
+    setTimeout(function () { dash.goal.style.display = 'none'; }, 2000);
   }
   function applyCockpitLight() { if (dash.cockpitGlow) dash.cockpitGlow.style.opacity = app.G.switches.light ? '1' : '0'; }
   function showSpace() { hideAll(); if (!screens.space) buildSpaceHud(); screens.space.style.display = 'block'; setStars(app.G.collected); }
@@ -957,7 +1100,7 @@ var UI = (function () {
   var UIobj = {
     init: init, showProfile: showProfile, showHangar: showHangar, showMap: showMap,
     showLaunch: showLaunch, setCountdown: setCountdown,
-    showSpace: showSpace, setStars: setStars, lightDashBulb: lightDashBulb, updateSpaceHud: updateSpaceHud,
+    showSpace: showSpace, showGoal: showGoal, setStars: setStars, lightDashBulb: lightDashBulb, updateSpaceHud: updateSpaceHud,
     showLanding: showLanding, deliveryBanner: deliveryBanner, showAfterLanding: showAfterLanding,
     showStick: showStick, moveStick: moveStick, hideStick: hideStick, checkPortrait: checkPortrait,
     get portrait() { return portrait; }, set portrait(v) { portrait = v; }
