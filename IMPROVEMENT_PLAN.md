@@ -89,8 +89,8 @@ Effort: **S** ≈ an hour-ish of focused work · **M** ≈ an afternoon · **L**
 | # | Item | Game | The basic | The fun | Effort |
 |---|---|---|---|---|---|
 | 2.1 | ✅ *shipped* — **Rescue missions.** A 🆘 hangar card; fly out empty to a stranded buddy (flare + beacon), low-slow pass scoops it aboard, carry it home, land → it joins a persistent colony by the runway | FS | Search & rescue is real aviation | A second verb: "someone needs us!" | M |
-| 2.2 | ✅ *shipped (partial)* — **Sky discoveries.** Hot-air balloons that bob + wobble when you honk, and a flock of birds circling. (Geese-that-scatter / boats / a train still open.) | FS | The world below is alive | Exploration pays | M |
-| 2.3 | **Day/night + working landing light.** Dusk flights: runway edge lights come on, and the 💡 toy switch becomes *the* tool for finding home | FS | Night flying; lights have jobs | A toy switch graduates into a real instrument | M |
+| 2.2 | ✅ *shipped* — **Sky discoveries.** Balloons that bob + wobble when you honk, birds circling, a **goose flock that scatters** when you buzz it or honk (then re-forms), and a **sailboat bobbing on a pond**. (A train on a loop still open.) | FS | The world below is alive | Exploration pays | M |
+| 2.3 | ✅ *shipped* — **Day/night + landing light.** `CONFIG.dayNight` (auto alternates): night flights get a starfield, glowing runway edge + threshold lights, and the 💡 landing light casts a real cone to find home by | FS | Night flying; lights have jobs | A toy graduates into a real instrument | M |
 | 2.4 | ✅ *shipped* — **Space station docking.** Station on the route with a ring that doubles as the speed light (green = slow enough); gentle arrival docks (clunk/chime/sparkle, auto-undock push-off), hot arrival boing-bounces; 🛰️→🪐 goal cards make each leg legible. Not a hard gate | SS | Docking = matching speeds; precision | Stage 2 finally has a near-term goal | M/L |
 | 2.5 | ✅ *shipped* — **Constellation collection.** Every scooped star permanently lights the next point of a constellation (rocket/star/house); a corner star-chart shows the current one filling; completing it flares gold in the sky forever + icon flash. Per profile, persisted | SS | Constellations are a thing; stars are collectible knowledge | Persistent sky-building = the retention engine, aimed upward | M |
 | 2.6 | **Surface moment.** After touchdown the buddy plants a flag (pilot's color), hops twice; flags persist next to buddies | SS | Flags on other worlds — the iconic image | The photo moment | S |
@@ -120,5 +120,5 @@ Effort: **S** ≈ an hour-ish of focused work · **M** ≈ an afternoon · **L**
 
 1. ✅ **Session A (rituals)** — *shipped*: 1.3 countdown + 1.4 milestones + 1.5 gravity pips + 1.6 spec restore.
 2. ✅ **Session B (the pilot's loop)** — *shipped*: 1.1 takeoff (runway roll, pull to rotate, auto-liftoff safety) + 1.2 landing (gold home beacon after delivery, flare cushion, touchdown → rollout → confetti-on-runway tier; hot arrivals bounce). Also fixed a latent heading bug: `headingQuatTo` mirrored x, so initial/respawn headings pointed off-target (the chevron had been covering for it) — both games corrected.
-3. **Session C (variety):** 2.1 rescue + 2.2 discoveries, or 2.4 station + 2.5 constellations — pick per which game the kids are playing more.
-4. Then phase 3 by kid demand.
+3. ✅ **Session C (variety)** — *shipped*: 2.4 docking + 2.5 constellations (SS), 2.1 rescue + 2.2 discoveries + 2.3 day/night (FS). **Phase 2 complete.**
+4. **Phase 3** in progress (creature forge deferred until spec'd).

@@ -39,7 +39,12 @@ Saturday and there's the dragon you airdropped, still waving.
   low and slow over a stranded buddy to scoop it up, and bring it home — it
   moves into a little colony beside the runway that grows over time.
 - A **living world** below: hot-air balloons bob along (honk and they wobble),
-  and birds wheel through the sky.
+  birds wheel through the sky, a **goose flock scatters** when you buzz it, and a
+  sailboat bobs on a pond.
+- **Day and night:** flights alternate between day and a starry night. At night
+  the runway edge-lights glow and the **💡 landing light** casts a real cone to
+  find your way home by — the toy switch becomes an instrument. (`CONFIG.dayNight`
+  pins it to `day`/`night`/`dusk` if you like.)
 
 ## 🚀 Space School
 

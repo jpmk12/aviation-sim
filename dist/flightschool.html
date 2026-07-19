@@ -264,6 +264,9 @@ var CONFIG = {
   invertPitch: false,       // false = push the stick UP to climb (kid-intuitive)
   bullseye: 30,             // <30u from the beacon = confetti + dance
   close: 100,              // <100u = enthusiastic wave
+  dayNight: 'auto',         // 'day' | 'dusk' | 'night' | 'auto' (alternates each
+                            //   flight so night flying — and the landing light —
+                            //   are actually experienced). Dad can pin it.
 
   // --- the pilot's loop: takeoff & landing (IMPROVEMENT_PLAN 1.1/1.2) ------
   takeoff: {
@@ -556,6 +559,75 @@ function buildAmbientBirds() {
   g.userData = { t: 0, cx: -500, cz: -400, cy: 320, R: 720 };
   return g;
 }
+
+// night sky (§2.3): a starfield up top + glowing runway edge lights
+function makeNightStars() {
+  var n = 650, g = new THREE.BufferGeometry(), pos = new Float32Array(n * 3), seed = 5;
+  function r() { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }
+  for (var i = 0; i < n; i++) { var u = r(), th = r() * TAU, s = Math.sqrt(1 - u * u * 0.0), R = 5200; pos[i * 3] = R * Math.cos(th) * (0.4 + r() * 0.6); pos[i * 3 + 1] = 500 + u * 4200; pos[i * 3 + 2] = R * Math.sin(th) * (0.4 + r() * 0.6); }
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  return new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 24, sizeAttenuation: true, fog: false, transparent: true, opacity: 0.9 }));
+}
+function makeRunwayLights() {
+  var g = new THREE.Group();
+  for (var z = -420; z <= 420; z += 84) {
+    [-82, 82].forEach(function (x) {
+      var m = new THREE.Mesh(new THREE.SphereGeometry(3.6, 6, 5), new THREE.MeshBasicMaterial({ color: 0xffd24a, fog: false }));
+      m.position.set(x, 6, z); g.add(m);
+    });
+  }
+  for (var x = -80; x <= 80; x += 27) {
+    var t = new THREE.Mesh(new THREE.SphereGeometry(3.6, 6, 5), new THREE.MeshBasicMaterial({ color: 0x66ff88, fog: false }));
+    t.position.set(x, 6, 440); g.add(t);
+  }
+  return g;
+}
+
+// a goose flock that cruises in formation and scatters when the plane buzzes
+// it (or you honk), then re-forms — the world reacts (§2.2)
+function makeGoose() {
+  var b = new THREE.Group();
+  var body = new THREE.Mesh(new THREE.SphereGeometry(3.2, 8, 6), makeLambert('#d7dbe0')); body.scale.z = 1.7; b.add(body);
+  var neck = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 5.5, 6), makeLambert('#2f343c', false)); neck.position.set(0, 2.4, 4.8); neck.rotation.x = -0.5; b.add(neck);
+  var head = new THREE.Mesh(new THREE.SphereGeometry(1.3, 6, 6), makeLambert('#2f343c', false)); head.position.set(0, 4.4, 6.4); b.add(head);
+  [-1, 1].forEach(function (s) { var w = new THREE.Mesh(new THREE.ConeGeometry(2.4, 9, 4), makeLambert('#c2c7ce', false)); w.rotation.z = s * Math.PI / 2; w.position.x = s * 6; w.userData.side = s; b.add(w); });
+  return b;
+}
+function buildGeese() {
+  var flock = new THREE.Group();
+  [[0, 0], [-11, -9], [11, -9], [-22, -18], [22, -18], [-33, -27]].forEach(function (o, i) {
+    var g = makeGoose(); g.userData = { off: new THREE.Vector3(o[0], 0, o[1]), scatter: null, phase: i * 0.9 }; flock.add(g);
+  });
+  flock.userData = { t: 0, center: new THREE.Vector3(), scatterT: 0 };
+  return flock;
+}
+function stepGeese(flock, planePos, dt, honk) {
+  var u = flock.userData; u.t += dt;
+  var R = 1100, sp = 0.1;
+  u.center.set(Math.cos(u.t * sp) * R + 300, 210 + Math.sin(u.t * 0.3) * 15, Math.sin(u.t * sp) * R - 500);
+  var near = planePos.distanceTo(u.center) < 340;
+  if ((near || honk) && u.scatterT <= 0) {
+    u.scatterT = 2.4; var seed = Math.floor(u.t * 97);
+    flock.children.forEach(function (g, i) { var a = (i * 1.7 + seed) % TAU; g.userData.scatter = new THREE.Vector3(Math.cos(a) * 40, 16 + (i % 3) * 10, Math.sin(a) * 40); });
+  }
+  if (u.scatterT > 0) u.scatterT -= dt;
+  var yaw = Math.atan2(Math.sin(u.t * sp), Math.cos(u.t * sp));
+  flock.children.forEach(function (g) {
+    if (u.scatterT > 0 && g.userData.scatter) g.position.addScaledVector(g.userData.scatter, dt);
+    else g.position.lerp(u.center.clone().add(g.userData.off), clamp(1.8 * dt, 0, 1));
+    g.rotation.y = yaw;
+    var flap = Math.sin(u.t * (u.scatterT > 0 ? 15 : 8) + g.userData.phase) * 0.55;
+    g.children.forEach(function (w) { if (w.userData && w.userData.side) w.rotation.x = flap * w.userData.side; });
+  });
+}
+function makeBoat(color) {
+  var g = new THREE.Group();
+  var hull = new THREE.Mesh(new THREE.BoxGeometry(10, 4, 26), makeLambert(color)); hull.position.y = 1; g.add(hull);
+  var cabin = new THREE.Mesh(new THREE.BoxGeometry(7, 5, 9), makeLambert('#f2f2f2')); cabin.position.set(0, 5, -3); g.add(cabin);
+  var mast = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 17), makeLambert('#8a6a4a', false)); mast.position.set(0, 10, 4); g.add(mast);
+  var sail = new THREE.Mesh(new THREE.PlaneGeometry(11, 13), new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide, flatShading: true })); sail.position.set(0, 10, 4); sail.rotation.y = Math.PI / 2; g.add(sail);
+  return g;
+}
 function stepAmbientBirds(g, dt) {
   var u = g.userData; u.t += dt;
   g.children.forEach(function (b, i) {
@@ -717,12 +789,41 @@ function boot() {
 
   var camera = new THREE.PerspectiveCamera(62, 1, 1, 12000);
 
-  scene.add(new THREE.HemisphereLight('#dff1ff', '#4f7a3c', 1.05));
+  var hemi = new THREE.HemisphereLight('#dff1ff', '#4f7a3c', 1.05); scene.add(hemi);
   var sun = new THREE.DirectionalLight('#fff6e0', 0.9); sun.position.set(-800, 1200, 600); scene.add(sun);
 
   var sky = buildSky(); scene.add(sky);
   scene.add(buildTerrain());
   scene.add(buildRunway());
+  // night dressing (hidden by day) — the runway lights + stars make the dark
+  // navigable, and turn the 💡 landing light into a real instrument (§2.3)
+  var nightStars = makeNightStars(); nightStars.visible = false; scene.add(nightStars);
+  var runwayLights = makeRunwayLights(); runwayLights.visible = false; scene.add(runwayLights);
+
+  // Reconfigure sky / fog / lights for the time of day. Called at each flight.
+  function applyTimeOfDay(mode) {
+    var u = sky.material.uniforms;
+    if (mode === 'night') {
+      scene.background.set('#0a1230'); scene.fog.color.set('#141c40'); scene.fog.near = 1400; scene.fog.far = 6200;
+      u.top.value.set('#050a20'); u.bot.value.set('#33447a');
+      hemi.intensity = 0.4; hemi.color.set('#465a94'); hemi.groundColor.set('#12181c');
+      sun.intensity = 0.28; sun.color.set('#9fb0e0'); sun.position.set(700, 800, -500);
+      nightStars.visible = true; runwayLights.visible = true;
+    } else if (mode === 'dusk') {
+      scene.background.set('#f2a066'); scene.fog.color.set('#efb488'); scene.fog.near = 1600; scene.fog.far = 5600;
+      u.top.value.set('#7a4f9c'); u.bot.value.set('#ffb27a');
+      hemi.intensity = 0.75; hemi.color.set('#ffd2a4'); hemi.groundColor.set('#5a4a3c');
+      sun.intensity = 0.65; sun.color.set('#ff9a54'); sun.position.set(-1400, 260, 500);
+      nightStars.visible = false; runwayLights.visible = true;
+    } else {
+      scene.background.set('#bfe3ff'); scene.fog.color.set('#cdeaff'); scene.fog.near = 1800; scene.fog.far = 5600;
+      u.top.value.set('#2f7fe6'); u.bot.value.set('#cdeaff');
+      hemi.intensity = 1.05; hemi.color.set('#dff1ff'); hemi.groundColor.set('#4f7a3c');
+      sun.intensity = 0.9; sun.color.set('#fff6e0'); sun.position.set(-800, 1200, 600);
+      nightStars.visible = false; runwayLights.visible = false;
+    }
+    G.night = (mode === 'night');
+  }
 
   // landmarks + beacons
   var beacons = {};
@@ -751,6 +852,13 @@ function boot() {
     balloons.push({ m: bal, baseY: gy + 150, phase: d[1] * 0.01 });
   });
   var ambientBirds = buildAmbientBirds(); scene.add(ambientBirds);
+  var geese = buildGeese(); scene.add(geese);
+  // a little pond with a sailboat that bobs
+  var pondX = -1100, pondZ = 900, pgy = terrainHeight(pondX, pondZ);
+  var pond = new THREE.Mesh(new THREE.CircleGeometry(240, 32), new THREE.MeshLambertMaterial({ color: 0x4aa3d6 }));
+  pond.rotation.x = -Math.PI / 2; pond.position.set(pondX, pgy + 3, pondZ); scene.add(pond);
+  var boat = makeBoat('#e8553a'); boat.position.set(pondX, pgy + 3, pondZ); scene.add(boat);
+  var boatBaseY = pgy + 3;
 
   // --- flight sim state (spec §3.1) ---
   var sim = {
@@ -772,6 +880,7 @@ function boot() {
     mode: 'deliver',    // 'deliver' | 'rescue'
     rescued: false, rescueTarget: null,
     honkFx: 0,          // decays after a honk -> balloons wobble
+    night: false, flightNo: 0,
     smoke: false, light: false,
     t: 0, prevT: 0,
     running: false
@@ -822,6 +931,11 @@ function boot() {
     sim.forward.set(0, 0, -1);
     sim.vel.set(0, 0, 0);
     G.cargo = null; G.phase = 'roll'; G.rollT = 0;
+    // time of day: auto alternates day/night each flight so both are seen
+    G.flightNo++;
+    var tod = CONFIG.dayNight;
+    if (tod === 'auto') tod = (G.flightNo % 2 === 0) ? 'day' : 'night';
+    applyTimeOfDay(tod);
     // beacon on for the active LZ only
     Object.keys(beacons).forEach(function (k) { beacons[k].visible = false; });
     if (G.activeLZ) beacons[G.activeLZ.id].visible = true;
@@ -1318,7 +1432,9 @@ function boot() {
       // plane follows sim
       plane.position.copy(sim.pos); plane.quaternion.copy(sim.q);
       plane.userData.prop.rotation.z += dt * (18 + sim.v * 0.4);
-      plane.userData.light.intensity = G.light ? 2.2 : 0;
+      // the landing light earns its keep at night (brighter, and the dark makes
+      // its cone visible) — a toy switch graduates into a real instrument (§2.3)
+      plane.userData.light.intensity = G.light ? (G.night ? 3.6 : 2.0) : 0;
       updateCamera(dt);
       UI.updateChevron(camera, G.phase === 'fly' ? G.activeLZ : null, sim.pos);
       UI.updateStallHint(G.phase === 'fly' && sim.v < AERO.C.V_STALL * 1.1);
@@ -1330,6 +1446,9 @@ function boot() {
     // wobble briefly after a honk — the world answers back)
     stepPuffs(dt); stepSmoke(dt);
     stepAmbientBirds(ambientBirds, dt);
+    stepGeese(geese, sim.pos, dt, G.honkFx > 1.1);
+    boat.position.y = boatBaseY + Math.sin(G.t * 1.2) * 1.6;
+    boat.rotation.z = Math.sin(G.t * 0.9) * 0.05; boat.rotation.x = Math.sin(G.t * 1.1) * 0.04;
     if (G.honkFx > 0) G.honkFx = Math.max(0, G.honkFx - dt);
     balloons.forEach(function (b) {
       b.m.position.y = b.baseY + Math.sin(G.t * 0.8 + b.phase) * 7 + Math.sin(G.t * 9) * G.honkFx * 5;
