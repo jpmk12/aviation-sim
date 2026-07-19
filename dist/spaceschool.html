@@ -310,6 +310,11 @@ var CONFIG = {
   ]
 };
 CONFIG.gameMeta = { id: 'spaceschool', title: 'Space School', icon: '🚀' };
+// Shared family world (SPACE_SCHOOL / CLAUDE.md §11.3, IMPROVEMENT_PLAN 3.5):
+// off by default (each pilot's own worlds), opt-in to see every pilot's buddies
+// on the planets. Also live-toggleable: spaceschool.html?family=1
+CONFIG.familyWorld = false;
+try { if (/[?&]family=1\b/.test(location.search)) CONFIG.familyWorld = true; } catch (e) {}
 
 // Constellations — the stars you scoop in space fill these in, one point per
 // star, across sessions (per profile). Each is a closed polyline in chart
@@ -885,9 +890,21 @@ function boot() {
     UI.drawChart();
     UI.showGoal('🛰️');   // after showSpace so the HUD (and the card) exists
   }
+  // buddies to show in orbit: this pilot's, or everyone's if the shared family
+  // world is on (IMPROVEMENT_PLAN 3.5). Current pilot's live save wins.
+  function worldDeliveries() {
+    if (!CONFIG.familyWorld) return G.save.deliveries || [];
+    var all = [];
+    CONFIG.profiles.forEach(function (pr) {
+      var list = (pr.id === G.profile.id) ? G.save.deliveries
+               : (function () { var sv = Persist.load(pr.id); return sv && sv.deliveries; })();
+      if (list && list.length) all = all.concat(list);
+    });
+    return all;
+  }
   function decoratePlanets(s) {
     var byPlanet = {};
-    (G.save.deliveries || []).forEach(function (d) { (byPlanet[d.planetId] = byPlanet[d.planetId] || []).push(d); });
+    worldDeliveries().forEach(function (d) { (byPlanet[d.planetId] = byPlanet[d.planetId] || []).push(d); });
     Object.keys(s.planets).forEach(function (k) {
       var po = s.planets[k]; if (po.decorated) { po.grp.remove(po.decorated); }
       var list = byPlanet[k]; if (!list || !list.length) return;
@@ -1281,6 +1298,7 @@ function boot() {
     afterLanding: afterLanding, backToMap: function () { UI.showMap(); }
   };
   App.setStage = setStage;
+  App.testWorldDeliveries = function () { return worldDeliveries().length; }; // family-world test hook
   // headless-test hook: jump the ship near the current destination so the
   // approach->landing transition fires without flying the full distance.
   App.testWarpToPlanet = function () { if (space && G.planet) { var tp = G.planet.pos; space.pos.set(tp[0] * 0.86, tp[1] * 0.86, tp[2] * 0.86); } };

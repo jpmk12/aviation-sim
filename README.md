@@ -157,6 +157,10 @@ re-run `node build.js`:
   back to climb".
 - **Buddies** — the cargo. `mass` (0.15–0.8) is the one that matters: it makes
   the plane/rocket sluggish and the landing trickier.
+- **Shared family world** — `CONFIG.familyWorld` (or `?family=1`), off by
+  default. Turn it on and every pilot sees *all* pilots' delivered buddies in one
+  world (on the ground in Flight School, in orbit in Space School). Charming, and
+  a plausible source of tears — your call.
 
 The flight numbers live in `src/aero.js` and `src/space.js` with comments
 explaining every tuning choice — and they're *proven*, not guessed (see below).

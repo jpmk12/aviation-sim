@@ -48,6 +48,12 @@ var CONFIG = {
   // push up to climb). Even firewalled it still stalls on a sustained pull.
   // Also live-toggleable without editing: open the game with ?throttle=1.
   manualThrottle: false,
+  // Shared family world (CLAUDE.md §5.3 / §11.3, IMPROVEMENT_PLAN 3.5). Off by
+  // default: each pilot flies their own world (no sibling conflict). Turn on and
+  // every pilot sees ALL pilots' delivered buddies in one shared world. Opt-in
+  // only — a charming idea, and a plausible source of tears; Dad's call. Also
+  // live-toggleable: flightschool.html?family=1
+  familyWorld: false,
   bullseye: 30,             // <30u from the beacon = confetti + dance
   close: 100,              // <100u = enthusiastic wave
   dayNight: 'auto',         // 'day' | 'dusk' | 'night' | 'auto' (alternates each
@@ -78,8 +84,9 @@ CONFIG.homeBase = { id: 'home', label: 'Home', color: '#ffd23f', pos: [0, 0, 0] 
 // Dashboard listing metadata (spec §10.1) — the launcher reads title + icon.
 CONFIG.gameMeta = { id: 'flightschool', title: 'Flight School', icon: '✈️' };
 
-// Live opt-in for the manual throttle (no rebuild needed): flightschool.html?throttle=1
+// Live opt-ins (no rebuild needed): ?throttle=1 (manual throttle), ?family=1 (shared world)
 try { if (/[?&]throttle=1\b/.test(location.search)) CONFIG.manualThrottle = true; } catch (e) {}
+try { if (/[?&]family=1\b/.test(location.search)) CONFIG.familyWorld = true; } catch (e) {}
 
 // --- Mission patches (IMPROVEMENT_PLAN 3.3): a wordless trophy room. Each is a
 // NASA-style embroidered badge earned by doing a thing once; the icon carries
@@ -1157,11 +1164,26 @@ function boot() {
     if (plane) scene.remove(plane);
     plane = makePlane(profile.color, G.save.tailNumber);
     scene.add(plane);
-    // clear + rebuild this pilot's delivered world
+    // clear + rebuild the delivered world (this pilot's, or everyone's if the
+    // shared family world is on — IMPROVEMENT_PLAN 3.5)
     while (deliveredGroup.children.length) deliveredGroup.remove(deliveredGroup.children[0]);
-    G.save.deliveries.forEach(function (rec) { addDelivered(rec, false); });
+    worldDeliveries().forEach(function (rec) { addDelivered(rec, false); });
     G.screen = 'hangar';
     UI.showHangar();
+  }
+
+  // The buddies to populate the world with: just this pilot's, unless the shared
+  // family world is on — then merge every pilot's deliveries into one world (the
+  // current pilot's live save wins over its stored copy).
+  function worldDeliveries() {
+    if (!CONFIG.familyWorld) return G.save.deliveries || [];
+    var all = [];
+    CONFIG.profiles.forEach(function (pr) {
+      var list = (pr.id === G.profile.id) ? G.save.deliveries
+               : (function () { var s = Persist.load(pr.id); return s && s.deliveries; })();
+      if (list && list.length) all = all.concat(list);
+    });
+    return all;
   }
 
   function chooseCreature(def) { G.carrying = def; G.screen = 'dest'; UI.showDest(); }
@@ -1364,6 +1386,9 @@ function boot() {
   };
   App.state = G;
   App.config = CONFIG;
+  // headless-test hooks (harmless in production)
+  App.testDeliveredCount = function () { return deliveredGroup.children.length; };
+  App.testWorldDeliveries = function () { return worldDeliveries().length; };
 
   UI.init(App, CONFIG);
   resize();
