@@ -108,9 +108,16 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
   const storageOK = await p.evaluate(() => { try { localStorage.setItem('_t','1'); localStorage.removeItem('_t'); return true; } catch(e){ return false; } });
   console.log('LANDING delivered=%d saved=%d tier=%s planet=%s', persist.deliveries, persist.saved, persist.tier, persist.planet);
 
+  // MISSION PATCHES (3.3): the journey should have earned launch + constellation
+  // + dock + the red-planet patch. Trophy-wall DOM shares Flight School's
+  // (verified there); here we prove the awarding integration end-to-end.
+  const spPatches = await p.evaluate(() => (window.SpaceSchool.G.save.patches || []).slice());
+  const spPatchesOK = ['launch', 'dock', 'constellation', 'red'].every(id => spPatches.indexOf(id) >= 0);
+  console.log('PATCHES %s ok=%s', JSON.stringify(spPatches), spPatchesOK);
+
   console.log('CONSOLE_ERRORS', errors.length); errors.slice(0, 10).forEach(e => console.log('  !', e));
   await b.close();
-  const ok = boot.three && boot.space && boot.app && boot.canvas && boot.profile && buddies === 4 && planets === 4 && st1 === 'launch' && reachedSpace && (starState.stars >= starsBefore + 6) && (storageOK ? starSaved === starState.stars : true) && bounced && docked && undocked && reachedLanding && persist.deliveries >= 1 && (storageOK ? persist.saved >= 1 : true) && persist.tier !== 'bounce' && persist.planet === 'red' && errors.length === 0;
+  const ok = boot.three && boot.space && boot.app && boot.canvas && boot.profile && buddies === 4 && planets === 4 && st1 === 'launch' && reachedSpace && (starState.stars >= starsBefore + 6) && (storageOK ? starSaved === starState.stars : true) && bounced && docked && undocked && reachedLanding && persist.deliveries >= 1 && (storageOK ? persist.saved >= 1 : true) && persist.tier !== 'bounce' && persist.planet === 'red' && spPatchesOK && errors.length === 0;
   console.log(ok ? '\nSPACE VERIFY: PASS ✅' : '\nSPACE VERIFY: FAIL ❌');
   process.exit(ok ? 0 : 1);
 })().catch(e => { console.error('HARNESS ERROR', e); process.exit(2); });

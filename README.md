@@ -50,6 +50,10 @@ Saturday and there's the dragon you airdropped, still waving.
   power lever appears — pull it back to slow down and descend, push it up to
   climb. It's still capped, so pulling up too hard *always* runs you out of
   speed, and idle can never strand the plane on the runway.
+- **Mission patches:** a 🏅 badge on the hangar opens a trophy wall. Do a thing
+  once — a bullseye drop, a rescue, a night flight, a runway landing, haul the
+  heaviest buddy — and its patch lights up; the rest sit greyed out until earned.
+  A wordless "look what I've done," per pilot.
 
 ## 🚀 Space School
 
@@ -81,7 +85,9 @@ Three stages, one journey: **launch → space → land.**
 </p>
 
 Same pilots and buddies as Flight School — and a heavier buddy makes a heavier
-rocket and a trickier landing, the same load-planning lesson carried across.
+rocket and a trickier landing, the same load-planning lesson carried across. It
+shares the **🏅 mission-patch** trophy wall too: launching, docking, finishing a
+constellation, landing on each world, and a feather-soft touchdown all earn one.
 
 ---
 

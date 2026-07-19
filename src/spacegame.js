@@ -52,6 +52,25 @@ CONFIG.constellations = [
 ];
 CONFIG.constTotal = CONFIG.constellations.reduce(function (a, c) { return a + c.points.length; }, 0);
 
+// --- Mission patches (IMPROVEMENT_PLAN 3.3): a wordless trophy room, matching
+// Flight School's. Earned by doing a thing once; the icon carries the meaning.
+// Per-profile, persisted. The "planet" patches follow CONFIG.planets.
+function planetIcon(id) {
+  return id === 'red' ? '🔴' : id === 'ice' ? '❄️' : id === 'ring' ? '🪐' : id === 'green' ? '🌍' : '🌑';
+}
+var HEAVY_MASS = CONFIG.creatures.reduce(function (m, c) { return Math.max(m, c.mass); }, 0);
+var PATCHES = [
+  { id: 'launch',        icon: '🚀', ring: '#ffd23f', label: 'Reached space' },
+  { id: 'dock',          icon: '🛰️', ring: '#a8dcea', label: 'Docked with the station' },
+  { id: 'constellation', icon: '✨', ring: '#ffe38a', label: 'Completed a constellation' }
+].concat(CONFIG.planets.map(function (p) {
+  return { id: p.id, icon: planetIcon(p.id), ring: p.color, label: 'Landed on ' + p.label };
+})).concat([
+  { id: 'feather', icon: '🪶', ring: '#cbeec4', label: 'Feather landing' },
+  { id: 'heavy',   icon: '🐉', ring: '#9b6bff', label: 'Heavy hauler' }
+]);
+function patchById(id) { for (var i = 0; i < PATCHES.length; i++) if (PATCHES[i].id === id) return PATCHES[i]; return null; }
+
 /* ============================================================================
  * small utilities
  * ==========================================================================*/
@@ -73,7 +92,7 @@ var Persist = (function () {
   function key(id) { return 'spaceschool:profile:' + id; }
   function load(id) { var r; try { r = ok ? localStorage.getItem(key(id)) : mem[id]; } catch (e) { r = mem[id]; } if (!r) return null; try { return JSON.parse(r); } catch (e) { return null; } }
   function save(o) { var r = JSON.stringify(o); try { if (ok) localStorage.setItem(key(o.profileId), r); else mem[o.profileId] = r; } catch (e) { mem[o.profileId] = r; } }
-  function blank(p) { return { profileId: p.id, icon: p.icon, color: p.color, tailNumber: tailFromInitials(p.initials || p.name), deliveries: [], missions: 0, stars: 0 }; }
+  function blank(p) { return { profileId: p.id, icon: p.icon, color: p.color, tailNumber: tailFromInitials(p.initials || p.name), deliveries: [], missions: 0, stars: 0, patches: [] }; }
   return { load: load, save: save, blank: blank, available: ok };
 })();
 
@@ -560,6 +579,7 @@ function boot() {
   function enterSpace() {
     if (!space) buildSpace();
     G.stageName = 'space'; G.running = true;
+    award('launch');                          // reached space (3.3)
     var s = space;
     // start near origin, facing the destination
     s.pos.set(0, 0, 0); s.vel.set(0, 0, 0);
@@ -643,6 +663,7 @@ function boot() {
         if (G.dockT >= 1.1) {
           G.dockState = 'docked'; G.dockT = 0;
           Audio.clunk(); Audio.chime(true); spawnSparks(s);
+          award('dock');                     // matched speeds and docked (3.3)
         }
       } else if (G.dockT >= 2.4) {
         // auto-undock: a push-off back out of the port, then on to the planet
@@ -802,7 +823,7 @@ function boot() {
     var cum = 0, done = null;
     CONFIG.constellations.forEach(function (c) { cum += c.points.length; if (G.save.stars === cum && before < cum) done = c; });
     buildConstellations(s); UI.drawChart();
-    if (done) { Audio.chime(true); UI.showGoal(done.icon); }
+    if (done) { Audio.chime(true); UI.showGoal(done.icon); award('constellation'); } // finished a picture (3.3)
     else { Audio.star(); }
   }
   App.testAddStar = function () { if (space) onStarCollected(space); };
@@ -860,6 +881,15 @@ function boot() {
     camera.position.set(l.x + 34, cy + 22, 60);
     camera.lookAt(l.x, Math.max(l.y, 6), 0);
   }
+  // award a mission patch (once) — new badge -> persist + a fly-in toast
+  function award(id) {
+    if (!G.save) return;
+    if (!G.save.patches) G.save.patches = [];
+    if (G.save.patches.indexOf(id) >= 0) return;
+    var def = patchById(id); if (!def) return;
+    G.save.patches.push(id); Persist.save(G.save); UI.patchEarned(def);
+  }
+
   function touchdown(l) {
     l.done = true;
     var tier = SPACE.landingTier(l.vy);
@@ -877,6 +907,10 @@ function boot() {
     var rec = { creatureId: def.id, planetId: G.planet.id, tier: tier, ts: 0 };
     G.save.deliveries.push(rec); G.save.missions = (G.save.missions || 0) + 1; Persist.save(G.save);
     UI.deliveryBanner(big ? 'bull' : tier === 'bounce' ? 'ok' : 'close');
+    // mission patches (IMPROVEMENT_PLAN 3.3)
+    if (G.planet && patchById(G.planet.id)) award(G.planet.id);   // the planet patch
+    if (tier === 'soft') award('feather');                        // softest touchdown
+    if (def.mass >= HEAVY_MASS - 1e-6) award('heavy');            // landed the biggest buddy
     setTimeout(function () { UI.showAfterLanding(); }, 2200);
   }
   function dust(l, n) { for (var i = 0; i < n; i++) { var m = new THREE.Mesh(new THREE.SphereGeometry(2 + (i % 3), 6, 5), new THREE.MeshBasicMaterial({ color: new THREE.Color(shade(G.planet.ground, 0.3)), transparent: true, opacity: 0.8, fog: false })); m.position.set(l.x, 1, 0); var a = i / n * TAU; l.sc.add(m); l.puffs.push({ m: m, vel: new THREE.Vector3(Math.cos(a) * 16, 6 + i, Math.sin(a) * 16), life: 1 }); } }
@@ -887,6 +921,7 @@ function boot() {
    * ================================================================== */
   function chooseProfile(p) {
     Audio.unlock(); G.profile = p; G.save = Persist.load(p.id) || Persist.blank(p);
+    if (!G.save.patches) G.save.patches = [];       // older saves predate patches
     G.stageName = 'hangar'; G.running = false; UI.showHangar();
   }
   function chooseBuddy(def) { G.buddy = def; G.stageName = 'map'; G.running = false; UI.showMap(); }
@@ -1034,7 +1069,40 @@ var UI = (function () {
     var sc = el('div', 'screen center space-bg'); el('div', 'bigtitle', sc).textContent = 'Pick your buddy';
     var row = el('div', 'cardrow wrap', sc);
     cfg.creatures.forEach(function (def) { var card = el('button', 'creaturecard', row); var s = 120 + def.mass * 150; card.style.width = s + 'px'; card.style.height = (s + 40) + 'px'; var img = el('img', 'cimg', card); try { img.src = previewURL(function () { return makeCreature(def); }, 220); } catch (e) {} var pips = el('div', 'pips', card); var n = Math.round(def.mass / 0.2) + 1; for (var i = 0; i < n; i++) { el('span', 'pip', pips).style.background = def.color; } card.onclick = function () { app.actions.chooseBuddy(def); }; });
+    // trophy room: a corner badge opens the patch wall (3.3)
+    var trophy = el('button', 'cornerbtn', sc); trophy.dataset.btn = '1'; trophy.textContent = '🏅';
+    trophy.onclick = function () { showPatches(); };
     return sc;
+  }
+
+  /* ---- mission patches: the trophy wall (3.3) ---- */
+  function showPatches() {
+    hideAll();
+    if (screens.patches) screens.patches.remove();
+    screens.patches = buildPatches(); root.appendChild(screens.patches); screens.patches.style.display = 'flex';
+  }
+  function buildPatches() {
+    var earned = (app.G.save && app.G.save.patches) || [];
+    var sc = el('div', 'screen center space-bg'); el('div', 'bigtitle', sc).textContent = 'My Patches';
+    var grid = el('div', 'patchgrid', sc);
+    PATCHES.forEach(function (p) {
+      var b = el('div', 'patch' + (earned.indexOf(p.id) >= 0 ? '' : ' locked'), grid);
+      b.style.setProperty('--ring', p.ring); b.textContent = p.icon;
+    });
+    var back = el('button', 'patchback', sc); back.dataset.btn = '1'; back.textContent = '🏠';
+    back.onclick = function () { showHangar(); };
+    return sc;
+  }
+  var toastWrap = null, toastTimer = null;
+  function patchEarned(def) {
+    if (!toastWrap) toastWrap = el('div', 'patchtoasts', root);
+    var t = el('div', 'patchtoast', toastWrap); t.style.setProperty('--ring', def.ring); t.textContent = def.icon;
+    void t.offsetWidth; t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () {
+      if (!toastWrap) return; var w = toastWrap; toastWrap = null; w.classList.add('out');
+      setTimeout(function () { w.remove(); }, 520);
+    }, 2000);
   }
 
   /* ---- map (planet) ---- */
@@ -1205,6 +1273,7 @@ var UI = (function () {
     showLaunch: showLaunch, setCountdown: setCountdown,
     showSpace: showSpace, showGoal: showGoal, setStars: setStars, drawChart: drawChart, lightDashBulb: lightDashBulb, updateSpaceHud: updateSpaceHud,
     showLanding: showLanding, deliveryBanner: deliveryBanner, showAfterLanding: showAfterLanding,
+    patchEarned: patchEarned,
     showStick: showStick, moveStick: moveStick, hideStick: hideStick, checkPortrait: checkPortrait,
     get portrait() { return portrait; }, set portrait(v) { portrait = v; }
   };

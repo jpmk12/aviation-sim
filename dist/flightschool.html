@@ -57,6 +57,33 @@
   @keyframes rescuepulse { 0%,100% { box-shadow: 0 10px 0 rgba(0,0,0,.15), 0 16px 28px rgba(0,0,0,.22); }
     50% { box-shadow: 0 10px 0 rgba(0,0,0,.15), 0 0 0 9px rgba(255,90,77,.32), 0 16px 28px rgba(0,0,0,.22); } }
 
+  /* ---- mission patches: trophy wall + earned toast (3.3) ---- */
+  .cornerbtn { position: absolute; top: calc(2vh + env(safe-area-inset-top)); right: 3vw;
+    width: 66px; height: 66px; border-radius: 18px; border: 4px solid #fff;
+    background: rgba(255,255,255,.18); color: #fff; font-size: 32px; cursor: pointer;
+    box-shadow: 0 6px 14px rgba(0,0,0,.25); }
+  .cornerbtn:active { transform: scale(.92); }
+  .patchgrid { display: flex; flex-wrap: wrap; gap: 2.4vh; justify-content: center;
+    align-items: center; max-width: 82vw; }
+  .patch { --ring: #ffd23f; width: 13.5vh; height: 13.5vh; max-width: 118px; max-height: 118px;
+    border-radius: 26px; background: #fff; border: 6px solid var(--ring);
+    display: flex; align-items: center; justify-content: center; font-size: 6.6vh; line-height: 1;
+    box-shadow: 0 8px 0 rgba(0,0,0,.15), 0 14px 24px rgba(0,0,0,.22); }
+  .patch.locked { filter: grayscale(1); opacity: .3; border-color: #fff; box-shadow: none; }
+  .patchback { position: absolute; bottom: 5vh; left: 50%; transform: translateX(-50%);
+    width: 96px; height: 96px; border-radius: 50%; border: 6px solid #fff; background: #ffd23f;
+    color: #333; font-size: 46px; cursor: pointer; box-shadow: 0 8px 0 rgba(0,0,0,.2); }
+  .patchback:active { transform: translateX(-50%) translateY(4px) scale(.96); box-shadow: 0 4px 0 rgba(0,0,0,.2); }
+
+  .patchtoasts { position: absolute; top: calc(15vh + env(safe-area-inset-top)); left: 50%;
+    transform: translateX(-50%); display: flex; gap: 12px; z-index: 35; pointer-events: none; }
+  .patchtoasts.out { opacity: 0; transition: opacity .5s ease; }
+  .patchtoast { --ring: #ffd23f; width: 84px; height: 84px; border-radius: 22px; background: #fff;
+    border: 5px solid var(--ring); display: flex; align-items: center; justify-content: center;
+    font-size: 42px; box-shadow: 0 8px 20px rgba(0,0,0,.3);
+    transform: scale(0) rotate(-18deg); transition: transform .4s cubic-bezier(.2,1.4,.4,1); }
+  .patchtoast.show { transform: scale(1) rotate(0); }
+
   /* ---- flight HUD ---- */
   .hud { position: absolute; inset: 0; z-index: 15; pointer-events: none; }
   .hud > * { pointer-events: auto; }
@@ -322,6 +349,27 @@ CONFIG.gameMeta = { id: 'flightschool', title: 'Flight School', icon: '✈️' }
 // Live opt-in for the manual throttle (no rebuild needed): flightschool.html?throttle=1
 try { if (/[?&]throttle=1\b/.test(location.search)) CONFIG.manualThrottle = true; } catch (e) {}
 
+// --- Mission patches (IMPROVEMENT_PLAN 3.3): a wordless trophy room. Each is a
+// NASA-style embroidered badge earned by doing a thing once; the icon carries
+// the meaning (a child can't read the label). Per-profile, persisted. The three
+// "place" patches are generated from CONFIG.landmarks so they follow Dad's edits.
+function kindIcon(kind) {
+  return kind === 'house' ? '🏠' : kind === 'mountain' ? '🏔️' : kind === 'island' ? '🏝️' : '📍';
+}
+var HEAVY_MASS = CONFIG.creatures.reduce(function (m, c) { return Math.max(m, c.mass); }, 0);
+var PATCHES = [
+  { id: 'first', icon: '📦', ring: '#7fd858', label: 'First delivery' },
+  { id: 'bull',  icon: '🎯', ring: '#ff3b30', label: 'Bullseye drop' }
+].concat(CONFIG.landmarks.map(function (lm) {
+  return { id: lm.id, icon: kindIcon(lm.kind), ring: lm.color, label: 'Visited ' + lm.label };
+})).concat([
+  { id: 'rescue', icon: '🆘', ring: '#ff5a4d', label: 'Rescue complete' },
+  { id: 'night',  icon: '🌙', ring: '#3a56b0', label: 'Night flight' },
+  { id: 'runway', icon: '🛬', ring: '#ffd23f', label: 'Landed on the runway' },
+  { id: 'heavy',  icon: '🐉', ring: '#9b6bff', label: 'Heavy hauler' }
+]);
+function patchById(id) { for (var i = 0; i < PATCHES.length; i++) if (PATCHES[i].id === id) return PATCHES[i]; return null; }
+
 /* ============================================================================
  * small utilities
  * ==========================================================================*/
@@ -367,7 +415,7 @@ var Persist = (function () {
     return {
       profileId: profile.id, icon: profile.icon, color: profile.color,
       tailNumber: tailFromInitials(profile.initials || profile.name),
-      collection: [], deliveries: [], flightSeconds: 0
+      collection: [], deliveries: [], patches: [], flightSeconds: 0
     };
   }
   return { load: load, save: save, blank: blank, available: ok };
@@ -1017,6 +1065,7 @@ function boot() {
       var onRunway = Math.abs(sim.pos.x) < L.runwayHalfW && Math.abs(sim.pos.z) < L.runwayHalfL;
       Audio.chime(onRunway);
       UI.deliveryBanner(onRunway ? 'bull' : 'close');
+      if (onRunway) award('runway');                 // a clean runway landing (3.3)
       setTimeout(returnToHangar, 1700);
     }
   }
@@ -1214,6 +1263,17 @@ function boot() {
     }
   }
 
+  // award a mission patch (once). New badge -> persist + a little fly-in toast.
+  function award(id) {
+    if (!G.save) return;
+    if (!G.save.patches) G.save.patches = [];
+    if (G.save.patches.indexOf(id) >= 0) return;    // already earned — silent
+    var def = patchById(id); if (!def) return;
+    G.save.patches.push(id);
+    Persist.save(G.save);
+    UI.patchEarned(def);
+  }
+
   function landCargo(c) {
     c.mesh.position.y = terrainHeight(c.mesh.position.x, c.mesh.position.z);
     c.chute.visible = false;
@@ -1235,6 +1295,13 @@ function boot() {
     G.save.deliveries.push(record);
     if (G.save.collection.indexOf(c.def.id) < 0) G.save.collection.push(c.def.id);
     Persist.save(G.save);
+
+    // mission patches (IMPROVEMENT_PLAN 3.3) — earned by the doing, not the word
+    award('first');
+    if (tier === 'bull') award('bull');
+    if (lz && patchById(lz.id)) award(lz.id);            // the place patch
+    if (G.night) award('night');
+    if (c.def.mass >= HEAVY_MASS - 1e-6) award('heavy'); // hauled the biggest buddy
 
     G.cargo = null;
     // delivery done -> the gold home beacon lights and the chevron points home:
@@ -1353,6 +1420,7 @@ function boot() {
     Audio.unlock(); // the profile tap is the audio-unlock gesture (spec §4.2)
     G.profile = profile;
     G.save = Persist.load(profile.id) || Persist.blank(profile);
+    if (!G.save.patches) G.save.patches = [];            // older saves predate patches
     // (re)build the plane in the pilot's colour with their tail number
     if (plane) scene.remove(plane);
     plane = makePlane(profile.color, G.save.tailNumber);
@@ -1410,6 +1478,8 @@ function boot() {
     if (G.save.collection.indexOf(def.id) < 0) G.save.collection.push(def.id);
     Persist.save(G.save);
     confetti(new THREE.Vector3(x, gy + 12, z), def.color);
+    award('rescue');                                   // brought a buddy home (3.3)
+    if (G.night) award('night');
     G.carrying = null; G.rescued = false;
   }
 
@@ -1663,7 +1733,46 @@ var UI = (function () {
     el('div', 'rescueicon', rcard).textContent = '🆘';
     el('div', 'destname', rcard).textContent = 'Rescue!';
     rcard.onclick = function () { app.actions.chooseRescue(); };
+    // trophy room: a corner badge opens the patch wall (3.3)
+    var trophy = el('button', 'cornerbtn', sc); trophy.dataset.btn = '1'; trophy.textContent = '🏅';
+    trophy.onclick = function () { showPatches(); };
     return sc;
+  }
+
+  /* ---------- mission patches: the trophy wall (3.3) ---------------------- */
+  function showPatches() {
+    hideAll();
+    var sc = buildPatches();
+    screens.patches && screens.patches.remove();
+    screens.patches = sc; root.appendChild(sc); sc.style.display = 'flex';
+  }
+  function buildPatches() {
+    var earned = (app.state.save && app.state.save.patches) || [];
+    var sc = el('div', 'screen center');
+    el('div', 'bigtitle', sc).textContent = 'My Patches';
+    var grid = el('div', 'patchgrid', sc);
+    PATCHES.forEach(function (p) {
+      var got = earned.indexOf(p.id) >= 0;
+      var b = el('div', 'patch' + (got ? '' : ' locked'), grid);
+      b.style.setProperty('--ring', p.ring);
+      b.textContent = p.icon;
+    });
+    var back = el('button', 'patchback', sc); back.dataset.btn = '1'; back.textContent = '🏠';
+    back.onclick = function () { showHangar(); };
+    return sc;
+  }
+  var toastWrap = null, toastTimer = null;
+  function patchEarned(def) {
+    if (!toastWrap) toastWrap = el('div', 'patchtoasts', root);
+    var t = el('div', 'patchtoast', toastWrap); t.style.setProperty('--ring', def.ring);
+    t.textContent = def.icon;
+    void t.offsetWidth; t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () {
+      if (!toastWrap) return;
+      var w = toastWrap; toastWrap = null; w.classList.add('out');
+      setTimeout(function () { w.remove(); }, 520);
+    }, 2000);
   }
 
   /* ---------- destination cards ------------------------------------------- */
@@ -1829,7 +1938,7 @@ var UI = (function () {
   }
 
   function hideAll() {
-    ['profile', 'hangar', 'dest', 'fly'].forEach(function (k) { if (screens[k]) screens[k].style.display = 'none'; });
+    ['profile', 'hangar', 'dest', 'fly', 'patches'].forEach(function (k) { if (screens[k]) screens[k].style.display = 'none'; });
     if (chevronEl) chevronEl.style.display = 'none';
     hideStick();
   }
@@ -1838,7 +1947,7 @@ var UI = (function () {
     init: init, showProfile: showProfile, showHangar: showHangar, showDest: showDest,
     showFly: showFly, showStick: showStick, moveStick: moveStick, hideStick: hideStick,
     setDropReady: setDropReady, setDropVisible: setDropVisible, showPullHint: showPullHint,
-    updateChevron: updateChevron, updateStallHint: updateStallHint,
+    updateChevron: updateChevron, updateStallHint: updateStallHint, patchEarned: patchEarned,
     deliveryBanner: deliveryBanner, checkPortrait: checkPortrait, fadeThen: fadeThen,
     get portrait() { return portrait; }, set portrait(v) { portrait = v; }
   };

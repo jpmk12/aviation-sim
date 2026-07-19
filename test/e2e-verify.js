@@ -126,6 +126,23 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
   }
   console.log('LANDING reachedHangar=%s', !!landed);
 
+  // ---- 6) MISSION PATCHES: earned by the flight, shown in the trophy wall ---
+  await sleep(page, 1000);                                // let the hangar rebuild
+  const patches = await page.evaluate(() => (window.FlightSchool.G.save.patches || []).slice());
+  let wall = { earned: 0, total: 0 };
+  const trophy = await page.$('.cornerbtn');
+  if (trophy) {
+    await trophy.click(); await sleep(page, 300);
+    wall = await page.evaluate(() => ({
+      earned: document.querySelectorAll('.patch:not(.locked)').length,
+      total: document.querySelectorAll('.patch').length
+    }));
+  }
+  const patchesOK = patches.indexOf('first') >= 0 && patches.indexOf('night') >= 0 &&
+                    patches.indexOf('runway') >= 0 && patches.indexOf('grandma') >= 0 &&
+                    wall.total === 9 && wall.earned === patches.length;
+  console.log('PATCHES %s wall=%d/%d ok=%s', JSON.stringify(patches), wall.earned, wall.total, patchesOK);
+
   await page.screenshot({ path: path.resolve(__dirname, '..', 'dist', '_verify_shot.png') });
   console.log('CONSOLE_ERRORS', errors.length); errors.slice(0, 10).forEach(e => console.log('  !', e));
   await browser.close();
@@ -141,6 +158,7 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
     Math.abs(leveled.bankY) < Math.abs(rolled.bankY) - 0.05 &&
     everStall && recov.v > 35 && !recov.stalled &&
     !!landed &&                                         // the loop closed at home
+    patchesOK &&                                        // mission patches earned + shown
     errors.length === 0;
   console.log(ok ? '\nVERIFY: PASS ✅' : '\nVERIFY: FAIL ❌');
   process.exit(ok ? 0 : 1);
