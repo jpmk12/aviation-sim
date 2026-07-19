@@ -75,6 +75,14 @@
     color: #333; font-size: 46px; cursor: pointer; box-shadow: 0 8px 0 rgba(0,0,0,.2); }
   .patchback:active { transform: translateX(-50%) translateY(4px) scale(.96); box-shadow: 0 4px 0 rgba(0,0,0,.2); }
 
+  /* aircraft picker (plane vs seaplane) — hangar, top-left (3.2) */
+  .aircraftseg { position: absolute; top: calc(2vh + env(safe-area-inset-top)); left: 3vw;
+    display: flex; gap: 8px; background: rgba(255,255,255,.16); border-radius: 18px; padding: 6px; }
+  .acbtn { width: 56px; height: 56px; border-radius: 14px; border: 3px solid transparent;
+    background: rgba(0,0,0,.14); font-size: 30px; cursor: pointer; }
+  .acbtn.on { background: #ffd23f; border-color: #fff; box-shadow: 0 0 0 3px rgba(255,210,63,.4); }
+  .acbtn:active { transform: scale(.92); }
+
   .patchtoasts { position: absolute; top: calc(15vh + env(safe-area-inset-top)); left: 50%;
     transform: translateX(-50%); display: flex; gap: 12px; z-index: 35; pointer-events: none; }
   .patchtoasts.out { opacity: 0; transition: opacity .5s ease; }

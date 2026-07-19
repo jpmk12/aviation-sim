@@ -71,8 +71,18 @@ var CONFIG = {
     homeRadius: 550,       // touchdowns count as landings inside this (flat home)
     gentleVy: -16,         // sink rate gentler than this = touchdown, else bounce
     runwayHalfW: 95, runwayHalfL: 480,  // on-runway = confetti tier
-    rolloutDecel: 16       // u/s^2 braking during rollout
+    rolloutDecel: 16,      // u/s^2 braking during rollout
+    // home lake beside the runway — the seaplane's landing surface (3.2). A
+    // second aircraft lands here on water (a splashdown) instead of the runway.
+    lake: { x: 620, z: 140, r: 300 }
   },
+  // aircraft the child can fly (IMPROVEMENT_PLAN 3.2). The seaplane rides on
+  // floats and comes home to the lake for a splashdown. Toggle on the hangar;
+  // the choice is per-pilot and persisted.
+  aircraft: [
+    { id: 'plane',    icon: '✈️', float: false },
+    { id: 'seaplane', icon: '🛩️', float: true }
+  ],
   // rescue missions (IMPROVEMENT_PLAN 2.1): fly low & slow over a stranded
   // buddy to scoop it up, then bring it home. The reverse of a delivery.
   rescue: { scoopDist: 95, scoopAGL: 70 }
@@ -105,6 +115,7 @@ var PATCHES = [
   { id: 'rescue', icon: '🆘', ring: '#ff5a4d', label: 'Rescue complete' },
   { id: 'night',  icon: '🌙', ring: '#3a56b0', label: 'Night flight' },
   { id: 'runway', icon: '🛬', ring: '#ffd23f', label: 'Landed on the runway' },
+  { id: 'splash', icon: '🌊', ring: '#3f96cf', label: 'Seaplane splashdown' },
   { id: 'heavy',  icon: '🐉', ring: '#9b6bff', label: 'Heavy hauler' }
 ]);
 function patchById(id) { for (var i = 0; i < PATCHES.length; i++) if (PATCHES[i].id === id) return PATCHES[i]; return null; }
@@ -548,7 +559,7 @@ function tailTexture(text, color) {
   var tex = new THREE.CanvasTexture(c); tex.anisotropy = 2; return tex;
 }
 
-function makePlane(color, tailNumber) {
+function makePlane(color, tailNumber, isFloat) {
   var g = new THREE.Group();
   var main = makeLambert(color), accent = makeLambert(shade(color, -0.25));
   var fus = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 2.4, 5, 10), main);
@@ -575,6 +586,19 @@ function makePlane(color, tailNumber) {
   var blade = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.7, 0.05), makeLambert('#2b2f36', false));
   var blade2 = blade.clone(); blade2.rotation.z = Math.PI / 2; prop.add(blade); prop.add(blade2);
   g.add(prop);
+
+  // seaplane floats: two pontoons on struts under the fuselage (3.2)
+  if (isFloat) {
+    var floatMat = makeLambert(shade(color, -0.4));
+    [-0.75, 0.75].forEach(function (fx) {
+      var pon = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 2.6, 5, 8), floatMat);
+      pon.rotation.x = Math.PI / 2; pon.position.set(fx, -0.95, -0.2); g.add(pon);
+      var ptip = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.5, 8), floatMat);
+      ptip.rotation.x = -Math.PI / 2; ptip.position.set(fx, -0.95, -1.7); g.add(ptip);
+      var strutF = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.7, 0.08), accent); strutF.position.set(fx, -0.5, -0.9); g.add(strutF);
+      var strutB = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.7, 0.08), accent); strutB.position.set(fx, -0.5, 0.5); g.add(strutB);
+    });
+  }
 
   // landing light (a cockpit toy, off by default)
   var light = new THREE.SpotLight(0xfff2c0, 0, 900, 0.5, 0.5, 1);
@@ -675,6 +699,14 @@ function boot() {
   var pond = new THREE.Mesh(new THREE.CircleGeometry(240, 32), new THREE.MeshLambertMaterial({ color: 0x4aa3d6 }));
   pond.rotation.x = -Math.PI / 2; pond.position.set(pondX, pgy + 3, pondZ); scene.add(pond);
   var boat = makeBoat('#e8553a'); boat.position.set(pondX, pgy + 3, pondZ); scene.add(boat);
+
+  // home lake beside the runway — the seaplane's splashdown surface (3.2)
+  var LK = CONFIG.landing.lake, lgy = terrainHeight(LK.x, LK.z);
+  var lake = new THREE.Mesh(new THREE.CircleGeometry(LK.r, 40), new THREE.MeshLambertMaterial({ color: 0x3f96cf }));
+  lake.rotation.x = -Math.PI / 2; lake.position.set(LK.x, lgy + 2, LK.z); scene.add(lake);
+  var lakeRim = new THREE.Mesh(new THREE.RingGeometry(LK.r, LK.r + 22, 40), new THREE.MeshBasicMaterial({ color: 0xdcc48a }));
+  lakeRim.rotation.x = -Math.PI / 2; lakeRim.position.set(LK.x, lgy + 1.6, LK.z); scene.add(lakeRim);
+  function overHomeWater(x, z) { return Math.hypot(x - LK.x, z - LK.z) < LK.r; }
   var boatBaseY = pgy + 3;
 
   // --- flight sim state (spec §3.1) ---
@@ -698,6 +730,8 @@ function boot() {
     rescued: false, rescueTarget: null,
     honkFx: 0,          // decays after a honk -> balloons wobble
     night: false, flightNo: 0,
+    aircraft: 'plane',  // 'plane' | 'seaplane' (3.2) — seaplane splashes home
+    splash: false,      // this landing is a water splashdown
     smoke: false, light: false,
     t: 0, prevT: 0,
     running: false
@@ -753,6 +787,8 @@ function boot() {
     var tod = CONFIG.dayNight;
     if (tod === 'auto') tod = (G.flightNo % 2 === 0) ? 'day' : 'night';
     applyTimeOfDay(tod);
+    G.splash = false;
+    setHomeTarget();                        // aircraft may have changed in the hangar
     // beacon on for the active LZ only
     Object.keys(beacons).forEach(function (k) { beacons[k].visible = false; });
     if (G.activeLZ) beacons[G.activeLZ.id].visible = true;
@@ -798,13 +834,18 @@ function boot() {
     sim.vel.copy(sim.forward).multiplyScalar(sim.v);
     sim.pos.addScaledVector(sim.vel, dt);
     sim.pos.y = terrainHeight(sim.pos.x, sim.pos.z) + 8;
+    if (G.splash && (Math.random() < dt * 3)) splashBurst(sim.pos);  // wake spray on the water glide
     if (sim.v < 6 && !G.rolloutDone) {
       G.rolloutDone = true;
       var L = CONFIG.landing;
-      var onRunway = Math.abs(sim.pos.x) < L.runwayHalfW && Math.abs(sim.pos.z) < L.runwayHalfL;
-      Audio.chime(onRunway);
-      UI.deliveryBanner(onRunway ? 'bull' : 'close');
-      if (onRunway) award('runway');                 // a clean runway landing (3.3)
+      if (G.splash) {                                // a happy seaplane splashdown
+        Audio.chime(true); UI.deliveryBanner('bull'); splashBurst(sim.pos);
+      } else {
+        var onRunway = Math.abs(sim.pos.x) < L.runwayHalfW && Math.abs(sim.pos.z) < L.runwayHalfL;
+        Audio.chime(onRunway);
+        UI.deliveryBanner(onRunway ? 'bull' : 'close');
+        if (onRunway) award('runway');               // a clean runway landing (3.3)
+      }
       setTimeout(returnToHangar, 1700);
     }
   }
@@ -886,7 +927,8 @@ function boot() {
 
     var gh = terrainHeight(sim.pos.x, sim.pos.z);
     var agl = sim.pos.y - gh;
-    var distHome = Math.hypot(sim.pos.x, sim.pos.z);
+    var hb = CONFIG.homeBase.pos;   // runway (plane) or the lake (seaplane)
+    var distHome = Math.hypot(sim.pos.x - hb[0], sim.pos.z - hb[2]);
     var emptyPlane = !G.carrying && !G.cargo;
 
     // rescue scoop: a low, near pass over the stranded buddy picks it up
@@ -917,14 +959,17 @@ function boot() {
     // ground contact — three outcomes, none of them a fail state:
     if (sim.pos.y < gh + GROUND_MARGIN) {
       var L = CONFIG.landing;
+      var onWater = isSeaplane() && overHomeWater(sim.pos.x, sim.pos.z);
       if (canLand && distHome < L.homeRadius && sim.vel.y > L.gentleVy) {
-        // gentle touchdown at home -> landing rollout (the pilot's loop closes)
-        G.phase = 'rollout'; G.rolloutDone = false;
+        // gentle touchdown at home -> landing rollout (the pilot's loop closes).
+        // Seaplane over the lake = a splashdown (a plume instead of a dust puff).
+        G.phase = 'rollout'; G.rolloutDone = false; G.splash = onWater;
         sim.pos.y = gh + 8;
-        // settle to wheels: keep the heading, drop the pitch/bank
+        // settle to wheels/floats: keep the heading, drop the pitch/bank
         sim.q.setFromAxisAngle(WORLD_Y, Math.atan2(-sim.forward.x, -sim.forward.z));
         sim.forward.set(0, 0, -1).applyQuaternion(sim.q);
-        Audio.thump(); dustPuff(sim.pos);
+        Audio.thump();
+        if (onWater) { splashBurst(sim.pos); award('splash'); } else dustPuff(sim.pos);
         if (G.rescued) deliverRescueHome();   // the buddy comes home to stay
         Object.keys(beacons).forEach(function (k) { beacons[k].visible = false; });
         UI.setDropVisible(false);
@@ -934,7 +979,7 @@ function boot() {
         // came in too hot at home -> comedy bounce that BLEEDS SPEED, so
         // bounce-bounce-settle always converges to a landing (funny, never
         // frustrating — a hot arrival is two boings and then a touchdown)
-        Audio.boing(); dustPuff(sim.pos);
+        Audio.boing(); if (onWater) splashBurst(sim.pos); else dustPuff(sim.pos);
         sim.pos.y = gh + GROUND_MARGIN + 2;
         sim.vel.y = 20;
         sim.v = Math.max(sim.v * 0.6, 28);
@@ -1077,6 +1122,17 @@ function boot() {
       puffs.push({ m: mm, vel: new THREE.Vector3(Math.cos(a) * 14, 8 + i, Math.sin(a) * 14), life: 1 });
     }
   }
+  // a white/blue water plume for a seaplane splashdown (3.2)
+  function splashBurst(pos) {
+    for (var i = 0; i < 14; i++) {
+      var mm = new THREE.Mesh(new THREE.SphereGeometry(2.5 + (i % 3) * 1.5, 6, 5),
+        new THREE.MeshBasicMaterial({ color: (i % 2 ? 0xffffff : 0x9fd6f2), transparent: true, opacity: 0.9, fog: false }));
+      mm.position.copy(pos); mm.position.y += 2;
+      var a = (i / 14) * TAU, sp = 12 + (i % 4) * 5;
+      scene.add(mm);
+      puffs.push({ m: mm, vel: new THREE.Vector3(Math.cos(a) * sp, 16 + (i % 5) * 4, Math.sin(a) * sp), life: 1.1, grav: true });
+    }
+  }
   function confetti(pos, color) {
     for (var i = 0; i < 40; i++) {
       var hue = (i * 37) % 360;
@@ -1154,16 +1210,37 @@ function boot() {
     UI.fadeThen(function () { UI.showHangar(); });
   }
 
+  /* ---- aircraft: the plane or the seaplane (IMPROVEMENT_PLAN 3.2) --------- */
+  function isSeaplane() { return G.aircraft === 'seaplane'; }
+  function buildAircraft() {
+    if (plane) scene.remove(plane);
+    plane = makePlane(G.profile.color, G.save.tailNumber, isSeaplane());
+    scene.add(plane);
+  }
+  // The seaplane comes home to the lake; the plane to the runway. Point the gold
+  // home beacon (and thus the nav chevron) at whichever it is.
+  function setHomeTarget() {
+    var LK = CONFIG.landing.lake;
+    CONFIG.homeBase.pos = isSeaplane() ? [LK.x, 0, LK.z] : [0, 0, 0];
+    if (beacons.home) beacons.home.position.set(CONFIG.homeBase.pos[0], terrainHeight(CONFIG.homeBase.pos[0], CONFIG.homeBase.pos[2]), CONFIG.homeBase.pos[2]);
+  }
+  // hangar picker: choose an aircraft, persist, rebuild the model, re-aim home
+  function setAircraft(id) {
+    if (G.aircraft === id) return;
+    G.aircraft = id; G.save.aircraft = id; Persist.save(G.save);
+    buildAircraft(); setHomeTarget();
+  }
+
   /* ---- profile selection wires up everything ----------------------------- */
   function chooseProfile(profile) {
     Audio.unlock(); // the profile tap is the audio-unlock gesture (spec §4.2)
     G.profile = profile;
     G.save = Persist.load(profile.id) || Persist.blank(profile);
     if (!G.save.patches) G.save.patches = [];            // older saves predate patches
-    // (re)build the plane in the pilot's colour with their tail number
-    if (plane) scene.remove(plane);
-    plane = makePlane(profile.color, G.save.tailNumber);
-    scene.add(plane);
+    if (!G.save.aircraft) G.save.aircraft = 'plane';     // older saves predate the seaplane
+    G.aircraft = G.save.aircraft;
+    buildAircraft();
+    setHomeTarget();
     // clear + rebuild the delivered world (this pilot's, or everyone's if the
     // shared family world is on — IMPROVEMENT_PLAN 3.5)
     while (deliveredGroup.children.length) deliveredGroup.remove(deliveredGroup.children[0]);
@@ -1382,6 +1459,7 @@ function boot() {
     toggleSmoke: function () { G.smoke = !G.smoke; return G.smoke; },
     toggleLight: function () { G.light = !G.light; return G.light; },
     setThrottle: function (t) { sim.throttle = clamp(t, 0, 1); return sim.throttle; },
+    setAircraft: setAircraft,
     backToHangar: returnToHangar
   };
   App.state = G;
@@ -1389,6 +1467,7 @@ function boot() {
   // headless-test hooks (harmless in production)
   App.testDeliveredCount = function () { return deliveredGroup.children.length; };
   App.testWorldDeliveries = function () { return worldDeliveries().length; };
+  App.testOverHomeWater = function () { return overHomeWater(sim.pos.x, sim.pos.z); };
 
   UI.init(App, CONFIG);
   resize();
@@ -1493,6 +1572,20 @@ var UI = (function () {
     // trophy room: a corner badge opens the patch wall (3.3)
     var trophy = el('button', 'cornerbtn', sc); trophy.dataset.btn = '1'; trophy.textContent = '🏅';
     trophy.onclick = function () { showPatches(); };
+    // aircraft picker: plane vs seaplane, top-left (3.2). Icon-only segmented
+    // control; the highlighted one flies next.
+    if (cfg.aircraft && cfg.aircraft.length > 1) {
+      var seg = el('div', 'aircraftseg', sc);
+      cfg.aircraft.forEach(function (a) {
+        var btn = el('button', 'acbtn' + (app.state.aircraft === a.id ? ' on' : ''), seg);
+        btn.dataset.btn = '1'; btn.textContent = a.icon;
+        btn.onclick = function () {
+          app.actions.setAircraft(a.id);
+          Array.prototype.forEach.call(seg.children, function (c) { c.classList.remove('on'); });
+          btn.classList.add('on');
+        };
+      });
+    }
     return sc;
   }
 

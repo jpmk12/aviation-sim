@@ -54,6 +54,9 @@ Saturday and there's the dragon you airdropped, still waving.
   once — a bullseye drop, a rescue, a night flight, a runway landing, haul the
   heaviest buddy — and its patch lights up; the rest sit greyed out until earned.
   A wordless "look what I've done," per pilot.
+- **Two aircraft:** a ✈️/🛩️ picker in the hangar. The **seaplane** rides on
+  floats and comes home to the **lake** beside the runway for a splashdown — the
+  home beacon points you at the water, and setting it down earns a 🌊 patch.
 
 ## 🚀 Space School
 

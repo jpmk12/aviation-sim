@@ -140,7 +140,7 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
   }
   const patchesOK = patches.indexOf('first') >= 0 && patches.indexOf('night') >= 0 &&
                     patches.indexOf('runway') >= 0 && patches.indexOf('grandma') >= 0 &&
-                    wall.total === 9 && wall.earned === patches.length;
+                    wall.total === 10 && wall.earned === patches.length;
   console.log('PATCHES %s wall=%d/%d ok=%s', JSON.stringify(patches), wall.earned, wall.total, patchesOK);
 
   await page.screenshot({ path: path.resolve(__dirname, '..', 'dist', '_verify_shot.png') });
