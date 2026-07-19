@@ -23,14 +23,20 @@ Launch and landing bookend each other (thrust vs gravity); space is the drift.
 ## 2. THE THREE STAGES
 
 ### 2.1 Launch (external side view — throttle)
-- Rocket on a pad. A big **vertical throttle lever** the child shoves up; a
-  glowing **IGNITION** button to light it.
-- Cannot fail: too little throttle just rumbles and sits (thrust < weight); push
-  up past ~60% and it lifts. This *is* the thrust-vs-gravity lesson.
+- An SLS-style rocket on a pad with a service tower. A big **LAUNCH button**
+  starts the **countdown ritual**: 5-4-3-2-1 in giant numerals with beeps,
+  engines light at 3 (smoke billows while the hold-down clamps grip), release
+  at 0. Then a **vertical throttle lever** flies the climb.
+- Cannot fail: too little throttle just rumbles and sits (thrust < weight), and
+  easing off mid-climb slows the rocket until it sinks back to the pad (soft
+  thump, never a crash). This *is* the thrust-vs-gravity lesson.
 - **Booster separation** partway up: side boosters tumble away with a *thunk*,
   the rocket gets much lighter and surges. Kids love this.
-- Rumble, fire, screen-shake all scale with throttle. Sky fades blue → black →
-  stars. Auto-transition to space at altitude.
+- **Ascent milestones** turn the ~20s climb into a story: a bird flock scatters
+  low, a cloud deck gets punched through with a whoosh, the sky fades blue →
+  black → stars, and Orion's **solar wings unfold** with a chime on reaching
+  space. Auto-transition to the space stage at altitude.
+- Rumble, fire, screen-shake all scale with throttle.
 
 ### 2.2 Space (first-person cockpit — the centrepiece)
 - **Dashboard cockpit**: the 3D scene is the window; a panel of chunky **switches

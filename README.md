@@ -105,9 +105,10 @@ game falls back to in-memory state so it still runs).
 go → left thumb steers, big red **DROP** airdrops the buddy over the target → fly
 low over the runway to come home for another trip.
 
-**Space School:** tap a pilot → pick a buddy → pick a planet → shove the
-**throttle** up to launch → in space, **steer + thrust** toward the beacon and
-flip switches for fun → **retro-burn** down to land softly. The buddy stays.
+**Space School:** tap a pilot → pick a buddy → pick a planet → press 🚀 for the
+**countdown** (5-4-3-2-1!) → fly the climb with the **throttle** → in space,
+**steer + thrust** toward the beacon and flip switches for fun → **retro-burn**
+down to land softly. The buddy stays.
 
 ---
 

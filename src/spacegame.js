@@ -103,6 +103,11 @@ var Audio = (function () {
     click: function () { tone('square', 240, 200, 0.05, 0.12); },
     sep:   function () { noise(0.3, 0.4, 500); tone('sine', 180, 70, 0.35, 0.3); },
     warp:  function () { noise(0.5, 0.25, 3000); tone('sawtooth', 200, 1200, 0.5, 0.12); },
+    countBeep: function (isZero) {
+      if (isZero) { tone('square', 880, 880, 0.5, 0.2); tone('square', 1100, 1100, 0.45, 0.14, 0.05); }
+      else tone('square', 620, 620, 0.12, 0.16);
+    },
+    whooshCloud: function () { noise(0.6, 0.3, 900); },
     star:  function () { tone('triangle', 880, 1320, 0.18, 0.16); },
     boing: function () { tone('sine', 320, 90, 0.28, 0.28); tone('sine', 260, 140, 0.28, 0.1, 0.02); },
     thump: function () { noise(0.18, 0.4, 480); tone('sine', 110, 55, 0.24, 0.3); },
@@ -177,6 +182,18 @@ function makeRocket(color) {
   var icps = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.5, 6, 18), white); icps.position.y = 38.2; g.add(icps);
   var orion = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 2.3, 3, 16), silver); orion.position.y = 42.7; g.add(orion);
   var cap = new THREE.Mesh(new THREE.ConeGeometry(1.2, 2, 14), white); cap.position.y = 45.2; g.add(cap);
+  // Orion solar wings — folded flat against the service module; unfold when the
+  // rocket reaches space (the "we made it" moment). rotation.z: folded -> out.
+  var wings = new THREE.Group();
+  [-1, 1].forEach(function (s) {
+    var hinge = new THREE.Group(); hinge.position.set(s * 2.1, 41.6, 0);
+    var panel = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.16, 1.6), mat('#2b4d8f', false));
+    panel.position.x = s * 2.5; hinge.add(panel);
+    hinge.rotation.z = s * Math.PI / 2;      // folded up along the body
+    hinge.userData.side = s;
+    wings.add(hinge);
+  });
+  g.add(wings);
   var tower = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 4.5, 8), red); tower.position.y = 48.5; g.add(tower);
   var tip = new THREE.Mesh(new THREE.ConeGeometry(0.26, 1, 8), red); tip.position.y = 51.2; g.add(tip);
 
@@ -199,8 +216,59 @@ function makeRocket(color) {
   flame.position.y = -5; flame.rotation.x = Math.PI; g.add(flame);
   var flame2 = new THREE.Mesh(new THREE.ConeGeometry(1.6, 7, 16), new THREE.MeshBasicMaterial({ color: 0xff7a2a, transparent: true, opacity: 0.95, fog: false }));
   flame2.position.y = -3; flame2.rotation.x = Math.PI; g.add(flame2);
-  g.userData = { boosters: boosters, flame: flame, flame2: flame2, core: core };
+  g.userData = { boosters: boosters, flame: flame, flame2: flame2, core: core, wings: wings };
   return g;
+}
+
+// A little flock of birds for the low sky — they flap, then scatter as the
+// rocket thunders past (ascent milestone #1).
+function makeBirdFlock() {
+  var flock = new THREE.Group();
+  for (var i = 0; i < 6; i++) {
+    var bird = new THREE.Group();
+    var body = new THREE.Mesh(new THREE.SphereGeometry(0.9, 6, 5), mat('#4a4f57', false)); bird.add(body);
+    [-1, 1].forEach(function (s) {
+      var wing = new THREE.Mesh(new THREE.ConeGeometry(0.5, 2.6, 4), mat('#5d636c', false));
+      wing.rotation.z = s * Math.PI / 2; wing.position.x = s * 1.6; wing.userData.side = s; bird.add(wing);
+    });
+    bird.position.set(34 + (i % 3) * 7, 100 + Math.sin(i * 2.1) * 14, -20 + (i * 9) % 40);
+    bird.userData = { phase: i * 1.3, vel: null };
+    flock.add(bird);
+  }
+  flock.userData = { scattered: false, altitude: 110 };
+  return flock;
+}
+function stepBirds(flock, rocketY, t, dt) {
+  var u = flock.userData;
+  if (!u.scattered && Math.abs(rocketY - u.altitude) < 45 && rocketY > 20) {
+    u.scattered = true;
+    flock.children.forEach(function (b, i) {
+      var a = (i / flock.children.length) * TAU;
+      b.userData.vel = new THREE.Vector3(Math.cos(a) * 26 + 14, 6 + (i % 3) * 4, Math.sin(a) * 26);
+    });
+  }
+  flock.children.forEach(function (b) {
+    var flap = Math.sin(t * (u.scattered ? 16 : 9) + b.userData.phase) * 0.6;
+    b.children.forEach(function (w) { if (w.userData.side) w.rotation.x = flap * w.userData.side; });
+    if (b.userData.vel) b.position.addScaledVector(b.userData.vel, dt);
+    else b.position.x += Math.sin(t * 0.7 + b.userData.phase) * dt * 2;
+  });
+}
+
+// A puffy cloud deck around the launch axis — the rocket punches through it
+// with a whoosh (ascent milestone #2).
+function makeCloudLayer(y) {
+  var layer = new THREE.Group();
+  for (var i = 0; i < 14; i++) {
+    var a = (i / 14) * TAU, r = 30 + ((i * 53) % 100);
+    var puff = new THREE.Mesh(new THREE.SphereGeometry(16 + (i * 7) % 22, 8, 6),
+      new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.88, flatShading: true }));
+    puff.position.set(Math.cos(a) * r, y + Math.sin(i * 2.7) * 12, Math.sin(a) * r);
+    puff.scale.y = 0.55;
+    layer.add(puff);
+  }
+  layer.userData = { y: y, pierced: false };
+  return layer;
 }
 
 // Billowing exhaust/pad smoke for the launch stage.
@@ -301,9 +369,12 @@ function boot() {
     tower.position.set(-11, 0, 0); sc.add(tower);
     var rocket = makeRocket('#ff8a3d'); rocket.position.y = 6; sc.add(rocket);
     var smokeGroup = new THREE.Group(); sc.add(smokeGroup);
+    var birds = makeBirdFlock(); sc.add(birds);
+    var clouds = makeCloudLayer(750); sc.add(clouds);
     launch = { sc: sc, rocket: rocket, stars: stars, ground: ground, pad: pad, tower: tower,
-               smokeGroup: smokeGroup, smoke: [], smokeT: 0,
-               y: 0, vy: 0, prevY: 0, prevVy: 0, sep: false, done: false, landedBack: false };
+               smokeGroup: smokeGroup, smoke: [], smokeT: 0, birds: birds, clouds: clouds,
+               y: 0, vy: 0, prevY: 0, prevVy: 0, sep: false, done: false, landedBack: false,
+               count: -1, enginesLit: false, wingsOut: false, wingsT: 0 };
     return sc;
   }
   function enterLaunch() {
@@ -315,7 +386,11 @@ function boot() {
     l.rocket = makeRocket(G.profile ? G.profile.color : '#ff8a3d');
     l.rocket.position.set(0, 6, 0); l.sc.add(l.rocket);
     l.y = 0; l.vy = 0; l.prevY = 0; l.prevVy = 0; l.sep = false; l.done = false; l.landedBack = false;
+    l.count = -1; l.enginesLit = false; l.wingsOut = false; l.wingsT = 0;
     while (l.smokeGroup.children.length) l.smokeGroup.remove(l.smokeGroup.children[0]); l.smoke.length = 0;
+    // fresh birds + clouds each mission (the flock re-forms, the deck re-puffs)
+    l.sc.remove(l.birds); l.birds = makeBirdFlock(); l.sc.add(l.birds);
+    l.sc.remove(l.clouds); l.clouds = makeCloudLayer(750); l.sc.add(l.clouds);
     G.throttle = 0; G.ignited = false;
     scenes.launch = l.sc;
     UI.showLaunch();
@@ -325,7 +400,21 @@ function boot() {
     var l = launch; if (!l) return;
     // heavier buddy = heavier rocket = needs more throttle to leave the pad
     var mass = (SPACE.C.M_FULL + (G.buddy ? G.buddy.mass : 0)) * (l.sep ? (SPACE.C.M_LIGHT / SPACE.C.M_FULL) : 1);
-    var thr = G.ignited ? G.throttle : 0;
+
+    // --- countdown ritual: 5-4-3-2-1, engines light at 3, clamps release at 0.
+    if (l.count > 0) {
+      var before = Math.ceil(l.count);
+      l.count -= dt;
+      var after = Math.max(0, Math.ceil(l.count));
+      if (after !== before) { UI.setCountdown(after); Audio.countBeep(after === 0); }
+      if (!l.enginesLit && l.count <= 3) { l.enginesLit = true; spawnLaunchSmoke(l, 10); }
+      if (l.count <= 0) { l.count = -1; G.ignited = true; }
+    }
+
+    // engines can be lit (flames, smoke, rumble) while the hold-down clamps
+    // still grip the rocket — physics only flows once G.ignited (release).
+    var lit = G.ignited || l.enginesLit;
+    var thr = lit ? G.throttle : 0;
     Audio.rumbleTo(thr);
     if (G.ignited) {
       // a = throttle*THRUST/m - g - drag(vy). Below the hover throttle the rocket
@@ -333,13 +422,29 @@ function boot() {
       // and drag caps the climb speed so the ascent is a real journey.
       var a = SPACE.launchAccel(thr, mass, l.vy);
       l.vy += a * dt;
-      if (l.vy < 0 && l.y <= 0) l.vy = 0;      // hold-down: sits on the pad
+      if (l.vy < 0 && l.y <= 0) l.vy = 0;      // sits on the pad
       l.y += l.vy * dt; if (l.y < 0) l.y = 0;
       if (!l.sep && l.y >= SPACE.C.ALT_SEP) {
         l.sep = true; Audio.sep();
         var bg = l.rocket.userData.boosters; bg.userData.drop = true; bg.userData.vy = -8;
       }
-      if (l.y >= SPACE.C.ALT_SPACE && !l.done) { l.done = true; enterSpace(); return; }
+      if (l.y >= SPACE.C.ALT_SPACE && !l.done) { l.done = true; UI.setCountdown(null); enterSpace(); return; }
+    }
+
+    // --- ascent milestones ---
+    stepBirds(l.birds, l.y, G.t, dt);
+    l.birds.visible = l.y < 500;
+    if (!l.clouds.userData.pierced && l.y > l.clouds.userData.y - 40) {
+      l.clouds.userData.pierced = true; Audio.whooshCloud();
+    }
+    l.clouds.visible = Math.abs(l.y - l.clouds.userData.y) < 900;
+    if (!l.wingsOut && l.y >= 2200) { l.wingsOut = true; Audio.chime(true); }
+    if (l.wingsOut && l.wingsT < 1) {
+      l.wingsT = Math.min(1, l.wingsT + dt / 1.3);
+      var k2 = l.wingsT * l.wingsT * (3 - 2 * l.wingsT); // smooth unfold
+      l.rocket.userData.wings.children.forEach(function (h) {
+        h.rotation.z = h.userData.side * (Math.PI / 2) * (1 - k2);
+      });
     }
     // came back down to the pad after falling -> soft thump + dust (never a crash)
     if (l.y <= 0 && l.prevY > 1 && l.prevVy < -4 && !l.landedBack) { l.landedBack = true; Audio.thump(); spawnLaunchSmoke(l, 12); }
@@ -350,14 +455,14 @@ function boot() {
     l.rocket.position.y = 6 + l.y;
     var b = l.rocket.userData.boosters;
     if (b.userData.drop) { b.userData.vy -= 30 * dt; b.position.y += b.userData.vy * dt; b.rotation.z += dt * 1.2; b.children.forEach(function (c, i) { c.rotation.x += dt * (1.5 + i); if (c.userData.flame) c.userData.flame.visible = false; }); if (b.position.y < -900) b.visible = false; }
-    var flScale = G.ignited ? (0.25 + thr * 1.25) : 0;
+    var flScale = lit ? (0.25 + thr * 1.25) : 0;
     l.rocket.userData.flame.scale.set(1, flScale, 1); l.rocket.userData.flame2.scale.set(1, flScale * 1.1, 1);
     l.rocket.userData.flame.visible = l.rocket.userData.flame2.visible = flScale > 0.02;
     if (!l.sep) b.children.forEach(function (c) { if (c.userData.flame) { c.userData.flame.visible = flScale > 0.02; c.userData.flame.scale.set(1, flScale, 1); } });
 
-    // exhaust / pad smoke while thrusting low
+    // exhaust / pad smoke while thrusting low (including the clamped hold-down)
     l.smokeT += dt;
-    if (G.ignited && thr > 0.12 && l.y < 200 && l.smokeT > 0.05) { l.smokeT = 0; spawnLaunchSmoke(l, 1); }
+    if (lit && thr > 0.12 && l.y < 200 && l.smokeT > 0.05) { l.smokeT = 0; spawnLaunchSmoke(l, 1); }
     stepLaunchSmoke(l, dt);
 
     // sky darkens + stars fade in with altitude
@@ -367,7 +472,7 @@ function boot() {
 
     // camera frames the whole rocket at the pad, then follows it up
     var camDist = 68 + l.y * 0.12;
-    _shake = lerp(_shake, G.ignited ? thr * 2.0 : 0, 0.2);
+    _shake = lerp(_shake, lit ? thr * 2.0 : 0, 0.2);
     var sh = Math.sin(G.t * 55) * _shake;
     camera.position.set(camDist, 30 + l.y + sh, camDist);
     camera.lookAt(0, 24 + l.y, 0);
@@ -638,7 +743,13 @@ function boot() {
   // expose actions to UI + tests
   App.actions = {
     chooseProfile: chooseProfile, chooseBuddy: chooseBuddy, choosePlanet: choosePlanet,
-    ignite: function () { G.ignited = true; Audio.unlock(); },
+    ignite: function () { G.ignited = true; Audio.unlock(); },  // direct release (used by tests)
+    startCountdown: function () {
+      Audio.unlock();
+      if (!launch || launch.count > 0 || G.ignited) return;
+      launch.count = 5.0; G.throttle = 1;   // throttle starts full; the lever can trim it mid-climb
+      UI.setCountdown(5); Audio.countBeep(false);
+    },
     setThrottle: function (v) { G.throttle = clamp(v, 0, 1); },
     setThrust: function (on) { if (space) space.thrusting = on; },
     setNudge: function (v) { G.nudge = clamp(v, -1, 1); },
@@ -656,7 +767,7 @@ function boot() {
   // approach->landing transition fires without flying the full distance.
   App.testWarpToPlanet = function () { if (space && G.planet) { var tp = G.planet.pos; space.pos.set(tp[0] * 0.86, tp[1] * 0.86, tp[2] * 0.86); } };
   App.testLandingState = function () { return landing ? { y: landing.y, vy: landing.vy, done: landing.done } : null; };
-  App.testLaunchState = function () { return launch ? { y: launch.y, vy: launch.vy, sep: launch.sep, ignited: G.ignited } : null; };
+  App.testLaunchState = function () { return launch ? { y: launch.y, vy: launch.vy, sep: launch.sep, ignited: G.ignited, count: launch.count, enginesLit: launch.enginesLit, wingsOut: launch.wingsOut, cloudsPierced: launch.clouds ? launch.clouds.userData.pierced : false, birdsScattered: launch.birds ? launch.birds.userData.scattered : false } : null; };
   App.testWarpToSpace = function () { if (launch) { launch.y = SPACE.C.ALT_SPACE - 15; launch.vy = 120; } }; // skip the climb in tests
 
   UI.init(App, CONFIG);
@@ -711,7 +822,17 @@ var UI = (function () {
   function buildMap() {
     var sc = el('div', 'screen center space-bg'); el('div', 'bigtitle', sc).textContent = 'Where to?';
     var row = el('div', 'cardrow wrap', sc);
-    cfg.planets.forEach(function (p) { var card = el('button', 'destcard', row); card.style.borderColor = p.color; card.style.background = shade(p.color, 0.86).getStyle(); var img = el('img', 'cimg', card); try { img.src = previewURL(function () { var o = makePlanet(p); return o; }, 240); } catch (e) {} el('div', 'destname', card).textContent = p.label; card.onclick = function () { app.actions.choosePlanet(p); }; });
+    cfg.planets.forEach(function (p) {
+      var card = el('button', 'destcard', row); card.style.borderColor = p.color; card.style.background = shade(p.color, 0.86).getStyle();
+      var img = el('img', 'cimg', card); try { img.src = previewURL(function () { var o = makePlanet(p); return o; }, 240); } catch (e) {}
+      // gravity pips — the same countable-dot language as buddy weight: more
+      // dots = this world pulls harder = burn harder to land soft (§ landing)
+      var pips = el('div', 'pips', card);
+      var n = Math.max(1, Math.round(p.gravity / 1.6));
+      for (var i = 0; i < n; i++) { el('span', 'pip', pips).style.background = shade(p.color, -0.25).getStyle(); }
+      el('div', 'destname', card).textContent = p.label;
+      card.onclick = function () { app.actions.choosePlanet(p); };
+    });
     return sc;
   }
 
@@ -734,13 +855,25 @@ var UI = (function () {
     // big LAUNCH button: lights the engines and throttles up to full, then the
     // lever takes over. Disappears once pressed.
     var lb = el('button', 'launchbtn', hud); lb.dataset.btn = '1'; lb.textContent = '🚀'; screens._launchBtn = lb;
-    lb.addEventListener('pointerdown', function (e) { e.stopPropagation(); app.actions.ignite(); app.actions.setThrottle(1); setVisual(1); lb.classList.add('gone'); });
+    lb.addEventListener('pointerdown', function (e) { e.stopPropagation(); app.actions.startCountdown(); setVisual(1); lb.classList.add('gone'); });
     el('div', 'hint hint-launch', hud).textContent = '⬆';
+    // giant countdown number, dead centre
+    var cn = el('div', 'countnum', hud); cn.style.display = 'none'; screens._count = cn;
   }
   function showLaunch() {
     hideAll(); if (!screens.launch) buildLaunchHud(); screens.launch.style.display = 'block';
     if (screens._launchBtn) screens._launchBtn.classList.remove('gone');
+    if (screens._count) screens._count.style.display = 'none';
     if (launchSetVisual) launchSetVisual(0);
+  }
+  // n: 5..1 shows the number; 0 shows the liftoff rocket; null hides.
+  function setCountdown(n) {
+    var cn = screens._count; if (!cn) return;
+    if (n === null) { cn.style.display = 'none'; return; }
+    cn.style.display = 'flex';
+    cn.textContent = n === 0 ? '🚀' : String(n);
+    cn.classList.remove('tick'); void cn.offsetWidth; cn.classList.add('tick');
+    if (n === 0) setTimeout(function () { cn.style.display = 'none'; }, 1400);
   }
 
   /* ---- space cockpit HUD ---- */
@@ -822,7 +955,7 @@ var UI = (function () {
 
   var UIobj = {
     init: init, showProfile: showProfile, showHangar: showHangar, showMap: showMap,
-    showLaunch: showLaunch,
+    showLaunch: showLaunch, setCountdown: setCountdown,
     showSpace: showSpace, setStars: setStars, lightDashBulb: lightDashBulb, updateSpaceHud: updateSpaceHud,
     showLanding: showLanding, deliveryBanner: deliveryBanner, showAfterLanding: showAfterLanding,
     showStick: showStick, moveStick: moveStick, hideStick: hideStick, checkPortrait: checkPortrait,

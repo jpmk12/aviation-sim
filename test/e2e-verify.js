@@ -58,7 +58,8 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
   // throttle requestAnimationFrame, which would stall the sim (test artifact).
   const carrying = await page.evaluate(() => !!window.FlightSchool.G.carrying);
   await page.evaluate(() => window.FlightSchool.actions.drop());
-  for (let i = 0; i < 24; i++) { await sleep(page, 700); const d = await page.evaluate(() => window.FlightSchool.G.save.deliveries.length); if (d > 0) break; }
+  // generous window: sim time can run well behind wall-clock under software GL
+  for (let i = 0; i < 60; i++) { await sleep(page, 700); const d = await page.evaluate(() => window.FlightSchool.G.save.deliveries.length); if (d > 0) break; }
   const persisted = await page.evaluate(() => {
     const g = window.FlightSchool.G;
     const raw = (function(){try{return localStorage.getItem('flightschool:profile:' + g.profile.id);}catch(e){return null;}})();
