@@ -42,6 +42,12 @@ var CONFIG = {
   ],
 
   invertPitch: false,       // false = push the stick UP to climb (kid-intuitive)
+  // v2 reward (CLAUDE.md §2.2, §11.4 / IMPROVEMENT_PLAN 3.1): a manual throttle
+  // lever. Off by default — auto-throttle flies itself. Flip to true when a kid
+  // is ready, and they gain the power lesson (throttle back to descend/slow;
+  // push up to climb). Even firewalled it still stalls on a sustained pull.
+  // Also live-toggleable without editing: open the game with ?throttle=1.
+  manualThrottle: false,
   bullseye: 30,             // <30u from the beacon = confetti + dance
   close: 100,              // <100u = enthusiastic wave
   dayNight: 'auto',         // 'day' | 'dusk' | 'night' | 'auto' (alternates each
@@ -71,6 +77,9 @@ CONFIG.homeBase = { id: 'home', label: 'Home', color: '#ffd23f', pos: [0, 0, 0] 
 
 // Dashboard listing metadata (spec §10.1) — the launcher reads title + icon.
 CONFIG.gameMeta = { id: 'flightschool', title: 'Flight School', icon: '✈️' };
+
+// Live opt-in for the manual throttle (no rebuild needed): flightschool.html?throttle=1
+try { if (/[?&]throttle=1\b/.test(location.search)) CONFIG.manualThrottle = true; } catch (e) {}
 
 /* ============================================================================
  * small utilities
@@ -644,7 +653,7 @@ function boot() {
   var sim = {
     q: new THREE.Quaternion(), v: AERO.C.V_CRUISE, pos: new THREE.Vector3(),
     vel: new THREE.Vector3(), m: AERO.C.M_PLANE,
-    stalled: false, pitchIn: 0, rollIn: 0,
+    stalled: false, pitchIn: 0, rollIn: 0, throttle: 1,
     forward: new THREE.Vector3(0, 0, -1)
   };
   App.sim = sim; // headless verification hook
@@ -706,7 +715,7 @@ function boot() {
     // spools, the engine note rises, and the child pulls the stick to rotate.
     sim.pos.set(0, terrainHeight(0, 0) + 8, 400);
     sim.q.identity();                       // facing -z, straight down the runway
-    sim.v = 0; sim.stalled = false;
+    sim.v = 0; sim.stalled = false; sim.throttle = 1;   // fresh flight = full power
     sim.m = AERO.C.M_PLANE + (G.carrying ? G.carrying.mass : 0);
     sim.forward.set(0, 0, -1);
     sim.vel.set(0, 0, 0);
@@ -727,8 +736,11 @@ function boot() {
   /* ---- takeoff ground roll (IMPROVEMENT_PLAN 1.1) ------------------------ */
   function stepRoll(dt) {
     var T = CONFIG.takeoff;
-    // auto-throttle spool: heavier cargo accelerates a touch slower (§3.7 echo)
-    sim.v = Math.min(sim.v + (T.accel / sim.m) * dt, T.vMaxRoll);
+    // auto-throttle spool: heavier cargo accelerates a touch slower (§3.7 echo).
+    // With the manual throttle unlocked, pushing it up rolls faster — but a
+    // floor keeps the plane rolling even at idle so nobody is ever stuck (§2.1).
+    var thr = CONFIG.manualThrottle ? Math.max(sim.throttle, 0.55) : 1;
+    sim.v = Math.min(sim.v + (T.accel * thr / sim.m) * dt, T.vMaxRoll);
     sim.forward.set(0, 0, -1).applyQuaternion(sim.q);
     sim.vel.copy(sim.forward).multiplyScalar(sim.v);
     sim.pos.addScaledVector(sim.vel, dt);
@@ -830,9 +842,12 @@ function boot() {
     _dqy.setFromAxisAngle(WORLD_Y, -turn * dt);        // right bank -> nose right
     sim.q.premultiply(_dqy);
 
-    // §3.2 the one equation that matters
+    // §3.2 the one equation that matters. With the manual throttle unlocked the
+    // pilot sets thrust directly (capped at THRUST_MAX so the energy lesson is
+    // untouched); otherwise the auto-throttle chases cruise.
+    var thOverride = CONFIG.manualThrottle ? sim.throttle * C.THRUST_MAX : undefined;
     sim.forward.set(0, 0, -1).applyQuaternion(sim.q);
-    sim.v += AERO.dvdt(sim.v, sim.forward.y, sim.m) * dt;
+    sim.v += AERO.dvdt(sim.v, sim.forward.y, sim.m, thOverride) * dt;
     sim.v = clamp(sim.v, 6, C.V_MAX);
 
     // velocity carries a little weight (§3.1)
@@ -1206,7 +1221,11 @@ function boot() {
       G.save.flightSeconds += dt;
       // engine note (§7) — the single strongest energy-lesson channel.
       // Full song during the takeoff roll (spool), quiet idle on rollout.
-      var thrust01 = G.phase === 'roll' ? 1 : G.phase === 'rollout' ? 0.1
+      // engine gain tracks thrust; with the manual throttle unlocked the lever
+      // position IS the gain (push it up and hear the engine answer).
+      var thrust01 = G.phase === 'rollout' ? 0.1
+                   : CONFIG.manualThrottle ? (G.phase === 'roll' ? Math.max(sim.throttle, 0.55) : sim.throttle)
+                   : G.phase === 'roll' ? 1
                    : AERO.thrust(sim.v) / AERO.C.THRUST_MAX;
       Audio.engine(sim.v, thrust01, true);
       // plane follows sim
@@ -1297,9 +1316,11 @@ function boot() {
     drop: dropCargo, honk: function () { Audio.honk(); G.honkFx = 1.3; },
     toggleSmoke: function () { G.smoke = !G.smoke; return G.smoke; },
     toggleLight: function () { G.light = !G.light; return G.light; },
+    setThrottle: function (t) { sim.throttle = clamp(t, 0, 1); return sim.throttle; },
     backToHangar: returnToHangar
   };
   App.state = G;
+  App.config = CONFIG;
 
   UI.init(App, CONFIG);
   resize();
@@ -1313,7 +1334,7 @@ function boot() {
  * single HTML file stays a thin shell. Everything survives text removal (§2.3).
  * ==========================================================================*/
 var UI = (function () {
-  var app, cfg, root, stickEl, chevronEl, dropEl, screens = {}, banner, previewRenderer;
+  var app, cfg, root, stickEl, chevronEl, dropEl, throttleEl, screens = {}, banner, previewRenderer;
   var portrait = false;
 
   function el(tag, cls, parent) { var e = document.createElement(tag); if (cls) e.className = cls; if (parent) parent.appendChild(e); return e; }
@@ -1445,6 +1466,10 @@ var UI = (function () {
     dropEl.innerHTML = '<span>DROP</span>';
     dropEl.addEventListener('pointerdown', function (e) { e.stopPropagation(); app.actions.drop(); pulse(dropEl); });
 
+    // manual throttle lever (v2 reward) — only when unlocked. Right thumb slides
+    // it up/down between DROP presses; green fill = power, felt not read (§2.3).
+    if (cfg.manualThrottle) buildThrottle(hud);
+
     // floating stick visual
     stickEl = el('div', 'stick', hud); stickEl.style.display = 'none';
     el('div', 'stick-knob', stickEl);
@@ -1469,7 +1494,40 @@ var UI = (function () {
   function flashBtn(b) { b.classList.add('on'); setTimeout(function () { b.classList.remove('on'); }, 180); }
   function pulse(elm) { elm.classList.remove('pulse'); void elm.offsetWidth; elm.classList.add('pulse'); }
 
-  function showFly() { hideAll(); screens.fly.style.display = 'block'; setDropReady(true); }
+  /* ---------- manual throttle lever (IMPROVEMENT_PLAN 3.1) ---------------- */
+  function buildThrottle(hud) {
+    throttleEl = el('div', 'throttle', hud); throttleEl.dataset.btn = '1';
+    var fill = el('div', 'throttle-fill', throttleEl);
+    var knob = el('div', 'throttle-knob', throttleEl); knob.textContent = '🛩️';
+    throttleEl._fill = fill; throttleEl._knob = knob;
+    var tid = -1;
+    function fromY(clientY) {
+      var r = throttleEl.getBoundingClientRect();
+      var t = clamp(1 - (clientY - r.top) / r.height, 0, 1);
+      app.actions.setThrottle(t); renderThrottle(t);
+    }
+    throttleEl.addEventListener('pointerdown', function (e) {
+      e.stopPropagation(); tid = e.pointerId;
+      try { throttleEl.setPointerCapture(e.pointerId); } catch (err) {}
+      fromY(e.clientY); e.preventDefault();
+    });
+    throttleEl.addEventListener('pointermove', function (e) {
+      if (e.pointerId === tid) { fromY(e.clientY); e.preventDefault(); }
+    });
+    function end(e) { if (e.pointerId === tid) tid = -1; }
+    throttleEl.addEventListener('pointerup', end);
+    throttleEl.addEventListener('pointercancel', end);
+    renderThrottle(1);
+  }
+  function renderThrottle(t) {
+    if (!throttleEl) return;
+    throttleEl._fill.style.height = (t * 100) + '%';
+    var h = throttleEl.clientHeight || throttleEl.offsetHeight;
+    var kh = throttleEl._knob.offsetHeight || 42;
+    throttleEl._knob.style.top = ((1 - t) * Math.max(0, h - kh)) + 'px';
+  }
+
+  function showFly() { hideAll(); screens.fly.style.display = 'block'; setDropReady(true); renderThrottle(1); }
   function setDropReady(on) { if (dropEl) dropEl.classList.toggle('ready', !!on); }
   function setDropVisible(on) { if (dropEl) dropEl.style.display = on ? '' : 'none'; }
   function showPullHint(on) { if (screens._pull) screens._pull.style.display = on ? 'block' : 'none'; }

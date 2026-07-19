@@ -100,7 +100,7 @@ Effort: **S** ≈ an hour-ish of focused work · **M** ≈ an afternoon · **L**
 
 | # | Item | Game | Why |
 |---|---|---|---|
-| 3.1 | **Manual throttle unlock** — the long-promised v2 reward; Dad flips a CONFIG flag when a kid is ready. FS gains the power lesson SS already teaches; skills echo across games | FS | The deepest deferred lesson |
+| 3.1 | ✅ *shipped* — **Manual throttle unlock.** `CONFIG.manualThrottle` (or `?throttle=1` live) puts a green power lever on the right edge: throttle back to slow/descend, push up to climb — the power lesson SS already teaches, now in FS. Still capped at `THRUST_MAX`, so a firewalled sustained pull *still stalls* (proven in `test/e2e-throttle.js`); a ground-roll floor means idle can never strand the plane | FS | The deepest deferred lesson |
 | 3.2 | **Second aircraft: helicopter or seaplane.** Helicopter = hover, which *is* the SS throttle lesson transplanted home. Seaplane = water landings anywhere | FS | Aircraft differ; new verbs everywhere |
 | 3.3 | **Mission patches.** Every completed mission type earns a NASA-style embroidered patch on the hangar wall — a wordless trophy room ("look what I've done" at a glance) | both | The missing collection view, in authentic aerospace language |
 | 3.4 | **Creature forge pipeline** (original spec §9.2): kids' own designed/3D-printed creatures become the cargo, mass and all | both | The reason this project exists — physical → digital loop |
@@ -121,4 +121,5 @@ Effort: **S** ≈ an hour-ish of focused work · **M** ≈ an afternoon · **L**
 1. ✅ **Session A (rituals)** — *shipped*: 1.3 countdown + 1.4 milestones + 1.5 gravity pips + 1.6 spec restore.
 2. ✅ **Session B (the pilot's loop)** — *shipped*: 1.1 takeoff (runway roll, pull to rotate, auto-liftoff safety) + 1.2 landing (gold home beacon after delivery, flare cushion, touchdown → rollout → confetti-on-runway tier; hot arrivals bounce). Also fixed a latent heading bug: `headingQuatTo` mirrored x, so initial/respawn headings pointed off-target (the chevron had been covering for it) — both games corrected.
 3. ✅ **Session C (variety)** — *shipped*: 2.4 docking + 2.5 constellations (SS), 2.1 rescue + 2.2 discoveries + 2.3 day/night (FS). **Phase 2 complete.**
-4. **Phase 3** in progress (creature forge deferred until spec'd).
+4. **Phase 3** in progress: 3.1 manual throttle *shipped*. Creature forge (3.4)
+   deferred until spec'd; 3.2 seaplane, 3.3 mission patches, 3.5 family world next.

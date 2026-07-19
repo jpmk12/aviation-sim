@@ -45,6 +45,11 @@ Saturday and there's the dragon you airdropped, still waving.
   the runway edge-lights glow and the **💡 landing light** casts a real cone to
   find your way home by — the toy switch becomes an instrument. (`CONFIG.dayNight`
   pins it to `day`/`night`/`dusk` if you like.)
+- **Manual throttle (a reward, off by default):** when a kid is ready, flip
+  `CONFIG.manualThrottle` (or just add `?throttle=1` to the URL) and a green
+  power lever appears — pull it back to slow down and descend, push it up to
+  climb. It's still capped, so pulling up too hard *always* runs you out of
+  speed, and idle can never strand the plane on the runway.
 
 ## 🚀 Space School
 
@@ -191,7 +196,8 @@ SPACE_SCHOOL.md   Space School design contract
 
 ## Roadmap (v2)
 
-- **Manual throttle** for Flight School when a kid is ready (a CONFIG flag).
+- ✅ **Manual throttle** for Flight School when a kid is ready
+  (`CONFIG.manualThrottle` / `?throttle=1`).
 - **Forged creatures** — swap the procedural buddies for meshes the kids design
   and 3D-print; `mass` flows straight into the flight model.
 - Wire a couple of Space School's toy switches to visible effects; tune trip

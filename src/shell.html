@@ -78,6 +78,20 @@
   .toy.on { background: #ffd23f; border-color: #fff; box-shadow: 0 0 0 4px rgba(255,210,63,.4); }
   .toy:active { transform: scale(.9); }
 
+  /* manual throttle lever (v2 reward) — vertical slider on the right edge,
+     above the DROP button. Green fill rises with power: more fill = more
+     energy, a wordless cue. Only present when CONFIG.manualThrottle. */
+  .throttle { position: absolute; right: calc(1.5vw + env(safe-area-inset-right)); top: 11vh;
+    width: 66px; height: 46vh; max-height: 420px; border-radius: 34px;
+    border: 4px solid rgba(255,255,255,.75); background: rgba(20,40,70,.32);
+    z-index: 16; overflow: hidden; backdrop-filter: blur(3px); box-shadow: 0 6px 18px rgba(0,0,0,.25); }
+  .throttle-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 100%;
+    background: linear-gradient(#8ff09a, #2fae4a); }
+  .throttle-knob { position: absolute; left: 50%; transform: translateX(-50%); top: 0;
+    width: 72px; height: 42px; border-radius: 16px; background: #fff;
+    box-shadow: 0 3px 8px rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center;
+    font-size: 24px; }
+
   .stick { position: absolute; width: 140px; height: 140px; border-radius: 50%;
     border: 4px solid rgba(255,255,255,.55); background: rgba(255,255,255,.12); z-index: 16; pointer-events: none; }
   .stick-knob { position: absolute; width: 70px; height: 70px; border-radius: 50%;

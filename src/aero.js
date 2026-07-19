@@ -74,8 +74,15 @@
   //   dv/dt = (thrust - drag) / m  -  g * sin(pitch)
   // sinPitch is the vertical component of the (unit) forward vector: climbing
   // (>0) bleeds speed, diving (<0) builds it. The whole lesson lives here.
-  function dvdt(v, sinPitch, m) {
-    return (thrust(v) - drag(v)) / m - C.G * sinPitch;
+  //
+  // thrustOverride (optional) supplies the thrust directly instead of the
+  // auto-throttle — used by the v2 manual-throttle reward (CLAUDE.md §2.2,
+  // IMPROVEMENT_PLAN 3.1). It is still capped at THRUST_MAX by the caller, so
+  // the §3.6 energy lesson is preserved: even firewalled, a sustained pull
+  // still bleeds to the stall because THRUST_MAX < m*G.
+  function dvdt(v, sinPitch, m, thrustOverride) {
+    var th = (thrustOverride === undefined || thrustOverride === null) ? thrust(v) : thrustOverride;
+    return (th - drag(v)) / m - C.G * sinPitch;
   }
 
   return {
