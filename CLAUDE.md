@@ -16,6 +16,10 @@ Every fail state you add is a five-year-old handing back the iPad.
 ### 2.2 Steering only (v1)
 Auto-throttle. No rudder — ever, in any version. Pitch and roll are the entire control surface of the game.
 Manual throttle is a **v2 reward**, not a v1 baseline.
+*(As-built: manual throttle shipped and is now **on by default** at Dad's
+request — a green power lever, `CONFIG.manualThrottle` (`?throttle=0` to revert
+to auto). It stays capped so the §3.6 energy lesson survives. Rudder remains
+permanently out.)*
 ### 2.3 No reading required
 The child cannot reliably read. Every affordance must survive with the text removed. Icons, color, size, sound, and motion carry all meaning. Text may exist for the adult, never as the sole signal.
 ### 2.4 Never lost

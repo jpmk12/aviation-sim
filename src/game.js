@@ -42,12 +42,12 @@ var CONFIG = {
   ],
 
   invertPitch: false,       // false = push the stick UP to climb (kid-intuitive)
-  // v2 reward (CLAUDE.md §2.2, §11.4 / IMPROVEMENT_PLAN 3.1): a manual throttle
-  // lever. Off by default — auto-throttle flies itself. Flip to true when a kid
-  // is ready, and they gain the power lesson (throttle back to descend/slow;
-  // push up to climb). Even firewalled it still stalls on a sustained pull.
-  // Also live-toggleable without editing: open the game with ?throttle=1.
-  manualThrottle: false,
+  // Manual throttle lever (CLAUDE.md §2.2, §11.4 / IMPROVEMENT_PLAN 3.1). ON by
+  // default now (Dad's call): a green power lever on the right lets the pilot
+  // throttle back to slow/descend and push up to climb. Even firewalled it still
+  // stalls on a sustained pull, so the energy lesson survives. Set to false to
+  // hand it back to the auto-throttle. Live-toggle either way with ?throttle=1/0.
+  manualThrottle: true,
   // Shared family world (CLAUDE.md §5.3 / §11.3, IMPROVEMENT_PLAN 3.5). Off by
   // default: each pilot flies their own world (no sibling conflict). Turn on and
   // every pilot sees ALL pilots' delivered buddies in one shared world. Opt-in
@@ -94,8 +94,9 @@ CONFIG.homeBase = { id: 'home', label: 'Home', color: '#ffd23f', pos: [0, 0, 0] 
 // Dashboard listing metadata (spec §10.1) — the launcher reads title + icon.
 CONFIG.gameMeta = { id: 'flightschool', title: 'Flight School', icon: '✈️' };
 
-// Live opt-ins (no rebuild needed): ?throttle=1 (manual throttle), ?family=1 (shared world)
-try { if (/[?&]throttle=1\b/.test(location.search)) CONFIG.manualThrottle = true; } catch (e) {}
+// Live overrides (no rebuild needed): ?throttle=1/0 (manual throttle on/off),
+// ?family=1 (shared world)
+try { var mt = /[?&]throttle=([01])\b/.exec(location.search); if (mt) CONFIG.manualThrottle = mt[1] === '1'; } catch (e) {}
 try { if (/[?&]family=1\b/.test(location.search)) CONFIG.familyWorld = true; } catch (e) {}
 
 // --- Mission patches (IMPROVEMENT_PLAN 3.3): a wordless trophy room. Each is a

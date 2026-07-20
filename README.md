@@ -45,11 +45,12 @@ Saturday and there's the dragon you airdropped, still waving.
   the runway edge-lights glow and the **💡 landing light** casts a real cone to
   find your way home by — the toy switch becomes an instrument. (`CONFIG.dayNight`
   pins it to `day`/`night`/`dusk` if you like.)
-- **Manual throttle (a reward, off by default):** when a kid is ready, flip
-  `CONFIG.manualThrottle` (or just add `?throttle=1` to the URL) and a green
-  power lever appears — pull it back to slow down and descend, push it up to
-  climb. It's still capped, so pulling up too hard *always* runs you out of
-  speed, and idle can never strand the plane on the runway.
+- **Throttle control:** a green **power lever** on the right — pull it back to
+  slow down and descend, push it up to climb (it starts at full for takeoff).
+  It's still capped, so pulling up too hard *always* runs you out of speed, and
+  idle can never strand the plane on the runway. On by default now; set
+  `CONFIG.manualThrottle: false` (or `?throttle=0`) to hand it back to the
+  auto-throttle.
 - **Mission patches:** a 🏅 badge on the hangar opens a trophy wall. Do a thing
   once — a bullseye drop, a rescue, a night flight, a runway landing, haul the
   heaviest buddy — and its patch lights up; the rest sit greyed out until earned.
@@ -146,9 +147,10 @@ game falls back to in-memory state so it still runs).
 
 **Flight School:** tap a pilot → pick a buddy (bigger = heavier) → pick where to
 go → the plane **rolls down the runway** (pull the stick up when the arrow
-bounces — that's your takeoff!) → left thumb steers, big red **DROP** airdrops
-the buddy over the target → follow the **gold beacon** home and set it down
-gently. Land on the runway for confetti; any grass will do too.
+bounces — that's your takeoff!) → left thumb steers, the green **throttle lever**
+(right) speeds up / slows down, big red **DROP** airdrops the buddy over the
+target → pull the throttle back and follow the **gold beacon** home to set it
+down gently. Land on the runway for confetti; any grass will do too.
 
 **Space School:** tap a pilot → pick a buddy → pick a planet → press 🚀 for the
 **countdown** (5-4-3-2-1!) → fly the climb with the **throttle**, keeping the
@@ -220,8 +222,8 @@ SPACE_SCHOOL.md   Space School design contract
 
 ## Roadmap (v2)
 
-- ✅ **Manual throttle** for Flight School when a kid is ready
-  (`CONFIG.manualThrottle` / `?throttle=1`).
+- ✅ **Manual throttle** for Flight School — now on by default
+  (`CONFIG.manualThrottle`; `?throttle=0` hands it back to the auto-throttle).
 - **Forged creatures** — swap the procedural buddies for meshes the kids design
   and 3D-print; `mass` flows straight into the flight model.
 - Wire a couple of Space School's toy switches to visible effects; tune trip

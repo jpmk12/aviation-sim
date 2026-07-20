@@ -103,6 +103,8 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
     before.v.toFixed(1), minV.toFixed(1), everStall, recov.v.toFixed(1), recov.stalled);
 
   // ---- 5) LANDING: place on final approach, descend; flare cushion + rollout ----
+  // pull the throttle back for the approach (manual throttle is on by default now)
+  await page.evaluate(() => window.FlightSchool.actions.setThrottle(0));
   await page.evaluate(() => {
     const s = window.FlightSchool.sim;
     s.pos.set(0, 90, 620);                       // short final, south of the runway
